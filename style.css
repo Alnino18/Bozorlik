@@ -139,3 +139,19 @@ pre {
   margin-top: 14px;
   white-space: pre-wrap;
 }
+/* Логотип учун янги стиллар */
+.logo-container {
+    text-align: center; /* Расмни марказга олади */
+    margin-bottom: 10px;
+}
+
+.main-logo {
+    width: 80px;        /* Лого ҳажми */
+    height: 80px;
+    border-radius: 20px; /* Бурчакларини юмшоқ қилади */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1); /* Енгил соя */
+}
+
+h1 {
+    margin-top: 5px;    /* Сарлавҳа ва лого орасидаги масофа */
+}
