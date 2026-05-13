@@ -7,22 +7,28 @@ function setMarket(market, btn) {
   btn.classList.add("active");
 }
 
+// ✅ Автоматик форматлаш (1.600.000)
 function formatNumber(num) {
-  return num.toLocaleString("uz-UZ");
+  return Number(num).toLocaleString("uz-UZ");
 }
 
 function addItem() {
   const input = document.getElementById("itemInput").value.trim();
-  const regex = /^(.+?)\s+(\d+\.?\d*)кг\s+\((\d+)\)\s+(\d+)$/;
-  const match = input.match(regex);
 
-  if(match) {
-    const name = match[1];
-    const kg = match[2];
-    const unitPrice = parseInt(match[3]);
-    const totalPrice = parseInt(match[4]);
+  // Барча рақамларни топамиз
+  const nums = input.match(/[\d.]+/g);
 
-    items.push({name, kg, unitPrice, totalPrice});
+  if(nums && nums.length > 0) {
+    // ✅ Фақат охирги рақамни оламиз
+    let lastNum = nums[nums.length - 1].replace(/\./g, "");
+    let totalPrice = parseInt(lastNum);
+
+    // Товар номи ва кгни олиш
+    const nameMatch = input.match(/^(.+?)\s+(\d+\.?\d*)кг/);
+    let name = nameMatch ? nameMatch[1] : "Товар";
+    let kg = nameMatch ? nameMatch[2] : "";
+
+    items.push({name, kg, totalPrice});
     renderList();
     document.getElementById("itemInput").value = "";
   } else {
@@ -36,7 +42,7 @@ function renderList() {
   items.forEach((i, index) => {
     listDiv.innerHTML += `
       <div id="item-${index}">
-        • ${i.name} ${i.kg}кг (${formatNumber(i.unitPrice)}) — ${formatNumber(i.totalPrice)} сум
+        • ${i.name} ${i.kg}кг — ${formatNumber(i.totalPrice)} сум
         <button onclick="editItem(${index})">✏️ Таҳрир</button>
         <button onclick="deleteItem(${index})">❌ Учириш</button>
       </div>`;
@@ -46,7 +52,7 @@ function renderList() {
 function editItem(index) {
   const i = items[index];
   document.getElementById("itemInput").value = 
-    `${i.name} ${i.kg}кг (${i.unitPrice}) ${i.totalPrice}`;
+    `${i.name} ${i.kg}кг ${i.totalPrice}`;
   deleteItem(index);
 }
 
@@ -63,13 +69,11 @@ function finish() {
 
   let cash = parseInt(document.getElementById("cash").value) || 0;
   let total = items.reduce((sum, i) => sum + i.totalPrice, 0);
-  let remain = cash - total;
+  let remain = cash - total; // ✅ касса ўзгармайди
 
-  document.getElementById("cash").value = remain;
-
-  let report = `🏦 Касса: ${formatNumber(remain)}\n📤 Расход: ${selectedMarket}\n\n`;
+  let report = `🏦 Касса: ${formatNumber(cash)}\n📤 Расход: ${selectedMarket}\n\n`;
   items.forEach(i => {
-    report += `• ${i.name} ${i.kg}кг (${formatNumber(i.unitPrice)}) ${formatNumber(i.totalPrice)}\n`;
+    report += `• ${i.name} ${i.kg}кг ${formatNumber(i.totalPrice)}\n`;
   });
   report += `\n💰 Общий: ${formatNumber(total)}\n💵 Қолди: ${formatNumber(remain)}`;
 
@@ -80,9 +84,10 @@ function finish() {
   renderList();
 }
 
+
 function sendToTelegram(report) {
   const token = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M"; 
-  const chatId = "483325961";
+  const chatId = "483325961";  
 
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
