@@ -102,7 +102,7 @@ function renderList() {
   items.forEach((i, index) => {
     const left = document.createElement("div");
     left.className = "item-left";
-    left.innerText = `${i.name}${i.kg ? " " + i.kg + "кг" : ""} (тан нархи: ${formatNumber(i.unitPrice)}) — ${formatNumber(i.totalPrice)} сум`;
+    left.innerText = `${i.name}${i.kg ? " " + i.kg + "кг" : ""} (${formatNumber(i.unitPrice)}) — ${formatNumber(i.totalPrice)}`;
 
     const editBtn = document.createElement("button");
     editBtn.className = "small-btn";
@@ -184,9 +184,6 @@ function finish() {
 function sendToTelegram(report) {
   const token = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M"; 
   const chatId = "483325961";
-  if(token === "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M" || chatId === "483325961") {
-    console.log("Telegram token/chatId not set. Report:\n", report);
-    return;
   }
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
