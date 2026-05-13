@@ -32,8 +32,8 @@ function finish() {
 }
 
 function sendToTelegram(report) {
-  const token = "<YOUR_BOT_TOKEN>"; 
-  const chatId = "<YOUR_CHAT_ID>";  
+  const token = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M"; 
+  const chatId = "483325961";  
 
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
