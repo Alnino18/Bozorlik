@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BOZORLIK</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-startup-image" href="splash.png">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
 </head>
 <body>
   <div class="app">
-    <h1>     🛒 BOZORLIK</h1>
+    <h1>🛒 BOZORLIK</h1>
+
+    <p>Бозорни танланг:</p>
     <div id="markets" class="market-buttons">
       <button onclick="setMarket('Куйлик', this)">Куйлик 🏬</button>
       <button onclick="setMarket('Фут Сити', this)">Фут Сити 🛍️</button>
@@ -18,14 +19,22 @@
       <button onclick="setMarket('Бошка', this)">Бошка ⚡</button>
     </div>
 
-    <input id="cash" type="number" placeholder="Касса (сум)">
-    <input id="itemInput" placeholder="Мош 10кг (15) 150000">
-    <button onclick="addItem()">+ Қўшиш</button>
+    <label for="cash" class="label">Касса (сум)</label>
+    <input id="cash" type="text" inputmode="numeric" placeholder="1.380.000" />
+
+    <label for="itemInput" class="label">Товар киритиш (мисол: Мош 10кг (15) 150000)</label>
+    <input id="itemInput" placeholder="Мош 10кг (15) 150000" />
+    <div class="row">
+      <button id="addBtn" onclick="addItem()">+ Қўшиш</button>
+    </div>
 
     <div id="list"></div>
+
     <button class="finish" onclick="finish()">✅ Тугатиш</button>
+
     <pre id="report"></pre>
   </div>
+
   <script src="app.js"></script>
 </body>
 </html>
