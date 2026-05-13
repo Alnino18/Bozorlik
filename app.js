@@ -1,6 +1,12 @@
 let items = [];
+let selectedMarket = "Куйлик"; // default
 
-// Сонларни форматлаш (1.600.000)
+function setMarket(market, btn) {
+  selectedMarket = market;
+  document.querySelectorAll("#markets button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
 function formatNumber(num) {
   return num.toLocaleString("uz-UZ");
 }
@@ -50,36 +56,33 @@ function deleteItem(index) {
 }
 
 function finish() {
-  // Агар товар йўқ бўлса ишламасин
   if(items.length === 0) {
     alert("Товарлар йўқ!");
     return;
   }
 
-  const market = document.getElementById("market").value;
   let cash = parseInt(document.getElementById("cash").value) || 0;
   let total = items.reduce((sum, i) => sum + i.totalPrice, 0);
   let remain = cash - total;
 
   document.getElementById("cash").value = remain;
 
-  let report = `🏦 Касса: ${formatNumber(remain)}\n📤 Расход: ${market}\n\n`;
+  let report = `🏦 Касса: ${formatNumber(remain)}\n📤 Расход: ${selectedMarket}\n\n`;
   items.forEach(i => {
     report += `• ${i.name} ${i.kg}кг (${formatNumber(i.unitPrice)}) ${formatNumber(i.totalPrice)}\n`;
   });
-  report += `\n💰 Общий: ${formatNumber(total)}\n💵 Қолдиқ: ${formatNumber(remain)}`;
+  report += `\n💰 Общий: ${formatNumber(total)}\n💵 Қолди: ${formatNumber(remain)}`;
 
   document.getElementById("report").innerText = report;
   sendToTelegram(report);
 
-  // ✅ Списокни тозалаш
   items = [];
   renderList();
 }
 
 function sendToTelegram(report) {
-  const token = "<YOUR_BOT_TOKEN>"; 
-  const chatId = "<YOUR_CHAT_ID>";  
+  const token = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M"; 
+  const chatId = "483325961";
 
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
