@@ -11,19 +11,19 @@
 <body>
   <div class="app">
     <h1>🛒 BOZORLIK</h1>
-    <div class="form">
-      <select id="market">
-        <option value="Куйлик">Куйлик</option>
-        <option value="Фут Сити">Фут Сити</option>
-        <option value="Эко">Эко</option>
-        <option value="Бошка">Бошка</option>
-      </select>
-      <input id="cash" type="number" placeholder="Касса (сум)">
-      <input id="name" placeholder="Товар номи">
-      <input id="kg" type="number" placeholder="Кг">
-      <input id="price" type="number" placeholder="Нархи">
-      <button onclick="addItem()">+ Қўшиш</button>
+    
+    <p>Бозорни танланг:</p>
+    <div id="markets" class="market-buttons">
+      <button onclick="setMarket('Куйлик', this)">Куйлик 🏬</button>
+      <button onclick="setMarket('Фут Сити', this)">Фут Сити 🛍️</button>
+      <button onclick="setMarket('Эко', this)">Эко 🌱</button>
+      <button onclick="setMarket('Бошка', this)">Бошка ⚡</button>
     </div>
+
+    <input id="cash" type="number" placeholder="Касса (сум)">
+    <input id="itemInput" placeholder="Мош 10кг (15) 150000">
+    <button onclick="addItem()">+ Қўшиш</button>
+
     <div id="list"></div>
     <button class="finish" onclick="finish()">✅ Тугатиш</button>
     <pre id="report"></pre>
