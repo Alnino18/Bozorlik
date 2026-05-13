@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOZORLIK</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-startup-image" href="splash.png">
+</head>
+<body>
+  <div class="app">
+    <h1>🛒 BOZORLIK касса</h1>
+    <div class="form">
+      <input id="name" placeholder="Товар номи">
+      <input id="kg" type="number" placeholder="Кг">
+      <input id="price" type="number" placeholder="Нархи">
+      <button onclick="addItem()">+ Қўшиш</button>
+    </div>
+    <div id="list"></div>
+    <button class="finish" onclick="finish()">✅ Тугатиш</button>
+    <pre id="report"></pre>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
