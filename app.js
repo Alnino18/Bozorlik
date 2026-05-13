@@ -167,9 +167,9 @@ function finish() {
 
 // sendToTelegram (placeholder token/chatId)
 function sendToTelegram(report) {
-  const token = "<8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M";
+  const token = "<8631566876:AAEaWdmZog6PKIsfnFJ-Lmlz7b9fFIRf8Wg";
   const chatId = "483325961";
-  if(token === "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M" || chatId === "483325961") {
+  if(token === "8631566876:AAEaWdmZog6PKIsfnFJ-Lmlz7b9fFIRf8Wg" || chatId === "483325961") {
     console.log("Telegram token/chatId not set. Report:\n", report);
     alert("Telegram токен ёки chat ID ўрнатилмаган.");
     return;
