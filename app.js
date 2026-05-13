@@ -167,13 +167,12 @@ function finish() {
 
 // sendToTelegram (placeholder token/chatId)
 function sendToTelegram(report) {
-  const token = "<8631566876:AAEaWdmZog6PKIsfnFJ-Lmlz7b9fFIRf8Wg";
+  // Токен бошидаги < белгисини олиб ташладик ва аниқ қийматларни ёздик
+  const token = "8631566876:AAEaWdmZog6PKIsfnFJ-Lmlz7b9fFIRf8Wg";
   const chatId = "483325961";
-  if(token === "8631566876:AAEaWdmZog6PKIsfnFJ-Lmlz7b9fFIRf8Wg" || chatId === "483325961") {
-    console.log("Telegram token/chatId not set. Report:\n", report);
-    alert("Telegram токен ёки chat ID ўрнатилмаган.");
-    return;
-  }
+
+  // Текширув қисмини (if) олиб ташладик, чунки у хато чиқараётган эди
+  
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
