@@ -3,105 +3,139 @@ body {
   background: linear-gradient(180deg, #e6f0ff, #f9f9f9);
   margin: 0;
   padding: 20px;
+  color: #0b1220;
 }
 
 .app {
-  max-width: 420px;
+  max-width: 520px;
   margin: auto;
   background: #fff;
-  border-radius: 24px;
-  padding: 25px;
-  box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 12px 25px rgba(0,0,0,0.08);
 }
 
 h1 {
   text-align: center;
   color: #007aff;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
+}
+
+.label {
+  font-size: 13px;
+  color: #556;
+  margin-top: 8px;
+  display: block;
 }
 
 .market-buttons {
   display: flex;
-  flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .market-buttons button {
   flex: 1;
-  padding: 12px;
+  padding: 10px;
   border: none;
-  border-radius: 20px;
-  font-size: 15px;
+  border-radius: 18px;
+  font-size: 14px;
   font-weight: 600;
   color: white;
   background: linear-gradient(90deg,#007aff,#5ac8fa);
-  box-shadow: 0 4px 10px rgba(0,122,255,0.3);
+  box-shadow: 0 4px 10px rgba(0,122,255,0.18);
   cursor: pointer;
-  transition: 0.3s;
+  transition: transform .12s ease, box-shadow .12s ease;
 }
 
 .market-buttons button.active {
   background: linear-gradient(90deg,#34c759,#30d158);
-  box-shadow: 0 4px 10px rgba(52,199,89,0.3);
+  box-shadow: 0 6px 14px rgba(52,199,89,0.18);
+  transform: translateY(-2px);
 }
 
-select, input {
+input {
   width: 100%;
-  padding: 14px;
-  margin: 10px 0;
-  border-radius: 16px;
-  border: 1px solid #ddd;
-  font-size: 16px;
+  padding: 12px;
+  margin: 8px -8px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font-size: 15px;
   outline: none;
-  transition: 0.3s;
+  box-sizing: border-box;
 }
 
-select:focus, input:focus {
-  border-color: #007aff;
-  box-shadow: 0 0 8px rgba(0,122,255,0.3);
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 button {
-  width: 100%;
-  padding: 14px;
-  margin-top: 12px;
+  padding: 12px;
   border: none;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
   color: white;
   cursor: pointer;
-  transition: 0.3s;
+  background: linear-gradient(90deg,#007aff,#5ac8fa);
+  box-shadow: 0 6px 12px rgba(0,122,255,0.12);
 }
 
 button.finish {
+  width: 100%;
+  margin-top: 14px;
   background: linear-gradient(90deg,#34c759,#30d158);
-  box-shadow: 0 6px 12px rgba(52,199,89,0.3);
+  box-shadow: 0 8px 18px rgba(52,199,89,0.14);
 }
 
-#list div {
-  background: #f0f8ff;
+#list {
+  margin-top: 12px;
+}
+
+.item-row {
+  background: #f7fbff;
   margin: 8px 0;
-  padding: 12px;
+  padding: 10px;
   border-radius: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-#list button {
-  width: auto;
-  padding: 6px 10px;
+.item-left {
   font-size: 14px;
-  margin-left: 6px;
+  color: #0b1220;
+}
+
+.item-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.small-btn {
+  background: transparent;
+  color: #007aff;
+  border: 1px solid rgba(0,122,255,0.12);
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.small-btn.danger {
+  color: #ff3b30;
+  border-color: rgba(255,59,48,0.08);
 }
 
 pre {
   background: #fff;
   padding: 14px;
-  border-radius: 16px;
-  font-size: 15px;
-  box-shadow: 0 6px 12px rgba(0,0,0,0.05);
-  margin-top: 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.04);
+  margin-top: 14px;
+  white-space: pre-wrap;
 }
