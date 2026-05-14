@@ -1,40 +1,225 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>BOZORLIK</title>
-  <link rel="icon" type="image/png" href="icon-192.png">
-  
-  <link rel="stylesheet" href="style.css" />
-  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <link rel="apple-touch-startup-image" href="splash.png"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="Bozorlik"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#007aff" id="tc"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <div class="app">
-    <h1>🛒 BOZORLIK</h1>
-    <div id="markets" class="market-buttons">
-      <button onclick="setMarket('Куйлик', this)">Куйлик 🏬</button>
-      <button onclick="setMarket('Фут Сити', this)">Фут Сити 🛍️</button>
-      <button onclick="setMarket('Эко', this)">Эко 🌱</button>
-      <button onclick="setMarket('Бошка', this)">Бошка ⚡</button>
+
+<!-- HEADER -->
+<header>
+  <div class="h-brand">
+    <img src="icon-192.png" class="h-logo" alt=""/>
+    <span class="h-title">Bozorlik</span>
+  </div>
+  <div class="h-actions">
+    <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
+    <button class="h-btn tg-status" id="tg-pill" onclick="openTgModal()">✈️ TG</button>
+  </div>
+</header>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-item active" id="ni-main" onclick="goTab('main')">
+    <span class="nav-icon">🛒</span>
+    <span class="nav-lbl">Закупка</span>
+  </button>
+  <button class="nav-item" id="ni-debt" onclick="goTab('debt')">
+    <span class="nav-icon">📋</span>
+    <span class="nav-lbl">Қарзлар</span>
+  </button>
+  <button class="nav-item" id="ni-history" onclick="goTab('history')">
+    <span class="nav-icon">📅</span>
+    <span class="nav-lbl">Тарих</span>
+  </button>
+  <button class="nav-item" id="ni-chart" onclick="goTab('chart')">
+    <span class="nav-icon">📊</span>
+    <span class="nav-lbl">Диаграмма</span>
+  </button>
+</nav>
+
+<main class="main-scroll">
+
+  <!-- ═══ TAB: MAIN ═══ -->
+  <div class="tab active" id="tab-main">
+
+    <!-- бозор карточка -->
+    <div class="card">
+      <p class="card-title">📍 Бозорни танланг</p>
+      <div class="market-grid">
+        <button class="market-btn" onclick="selectMarket(this,'Куйлик')">
+          <span class="mb-icon">🏪</span>
+          <span class="mb-name">Куйлик</span>
+        </button>
+        <button class="market-btn" onclick="selectMarket(this,'Фут Сити')">
+          <span class="mb-icon">👟</span>
+          <span class="mb-name">Фут Сити</span>
+        </button>
+        <button class="market-btn" onclick="selectMarket(this,'Эко')">
+          <span class="mb-icon">🌿</span>
+          <span class="mb-name">Эко</span>
+        </button>
+        <button class="market-btn" onclick="selectMarket(this,'Бошқа')">
+          <span class="mb-icon">📍</span>
+          <span class="mb-name">Бошқа</span>
+        </button>
+      </div>
+      <input id="customMarket" class="field" placeholder="Бозор номи..." style="display:none; margin-top:8px"/>
+      <p class="card-title" style="margin-top:16px">🏦 Касса</p>
+      <input id="cash" type="number" class="field" placeholder="Касса суммаси (сўм)" oninput="updateStats()"/>
     </div>
 
-    <label for="cash" class="label">Касса (сум)</label>
-    <input id="cash" type="text" inputmode="numeric" placeholder="0" />
-
-    <label for="itemInput" class="label">Товар киритиш (мисол: Мош 10кг (15) 150000)</label>
-    <input id="itemInput" placeholder="Мош 10кг (15) 150000" />
-    <div class="row">
-      <button id="addBtn" onclick="addItem()">+ Қўшиш</button>
+    <!-- live stats -->
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat-chip blue">
+        <span class="sc-label">Касса</span>
+        <span class="sc-val" id="sc-kassa">0</span>
+      </div>
+      <div class="stat-chip orange">
+        <span class="sc-label">Нақд</span>
+        <span class="sc-val" id="sc-cash">0</span>
+      </div>
+      <div class="stat-chip purple">
+        <span class="sc-label">Қарз</span>
+        <span class="sc-val" id="sc-debt">0</span>
+      </div>
+      <div class="stat-chip green" id="sc-remain-chip">
+        <span class="sc-label">Қолдиқ</span>
+        <span class="sc-val" id="sc-remain">0</span>
+      </div>
     </div>
 
-    <div id="list"></div>
+    <!-- progress bar -->
+    <div class="prog-track" id="progTrack" style="display:none">
+      <div class="prog-fill" id="progFill"></div>
+    </div>
 
-    <button class="finish" onclick="finish()">✅ Тугатиш</button>
+    <!-- нақд товар -->
+    <div class="card">
+      <div class="section-head">
+        <span class="section-icon cash-icon">💰</span>
+        <span class="section-label">Нақд товар</span>
+        <span class="count-badge cash-badge" id="cash-count">0</span>
+      </div>
+      <p class="hint-text">Формат: <code>Мош 10кг (15000) 150000</code> ёки <code>Кийим 80000</code></p>
+      <div class="input-row">
+        <input id="cashInp" class="field inp-flex" placeholder="Мош 10кг (15000) 150000"
+               onkeydown="if(event.key==='Enter')addCash()"/>
+        <button class="add-btn green-btn" onclick="addCash()">+</button>
+      </div>
+      <div id="cashList" class="item-list"></div>
+      <div class="subtotal cash-subtotal" id="cashSub" style="display:none">
+        Жами нақд: <b id="cashSubVal">0</b> сўм
+      </div>
+    </div>
 
-    <pre id="report"></pre>
+    <!-- қарз товар -->
+    <div class="card">
+      <div class="section-head">
+        <span class="section-icon debt-icon">📋</span>
+        <span class="section-label">Қарзга товар</span>
+        <span class="count-badge debt-badge" id="debt-count">0</span>
+      </div>
+      <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
+      <div class="input-row">
+        <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
+               onkeydown="if(event.key==='Enter')addDebt()"/>
+        <button class="add-btn purple-btn" onclick="addDebt()">+</button>
+      </div>
+      <div class="two-col">
+        <input type="date" id="debtDate" class="field"/>
+        <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
+      </div>
+      <div id="debtList" class="item-list"></div>
+      <div class="subtotal debt-subtotal" id="debtSub" style="display:none">
+        Жами қарз: <b id="debtSubVal">0</b> сўм
+      </div>
+    </div>
+
+    <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
+    <pre id="report" class="report-box" style="display:none"></pre>
+    <div style="height:80px"></div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- ═══ TAB: DEBT ═══ -->
+  <div class="tab" id="tab-debt">
+    <div class="card">
+      <p class="card-title">📋 Барча қарзлар</p>
+      <div class="debt-summary" id="debtSummary">
+        Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
+      </div>
+      <div id="allDebtList" class="item-list"></div>
+      <button class="danger-btn" onclick="clearAllDebts()">🗑 Барча қарзларни тозалаш</button>
+    </div>
+    <div style="height:80px"></div>
+  </div>
+
+  <!-- ═══ TAB: HISTORY ═══ -->
+  <div class="tab" id="tab-history">
+    <div class="card">
+      <p class="card-title">📅 Тарих</p>
+      <div class="filter-row">
+        <input type="month" id="histMonth" class="field" onchange="renderHistory()"/>
+        <button class="sm-danger-btn" onclick="clearHistory()">🗑</button>
+      </div>
+      <div id="histList"></div>
+    </div>
+    <div style="height:80px"></div>
+  </div>
+
+  <!-- ═══ TAB: CHART ═══ -->
+  <div class="tab" id="tab-chart">
+    <div class="card">
+      <p class="card-title">📊 Кунлик харажат</p>
+      <div class="period-row">
+        <button class="period-btn active" id="pb-week" onclick="setPeriod('week')">Ҳафта</button>
+        <button class="period-btn" id="pb-month" onclick="setPeriod('month')">Ой</button>
+        <button class="period-btn" id="pb-all" onclick="setPeriod('all')">Ҳамма</button>
+      </div>
+      <div class="chart-box"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="card">
+      <p class="card-title">📊 Бозор бўйича</p>
+      <div class="chart-box"><canvas id="pieChart"></canvas></div>
+    </div>
+    <div style="height:80px"></div>
+  </div>
+
+</main>
+
+<!-- TG MODAL -->
+<div class="modal-bg" id="tgModal" onclick="closeTgModal(event)">
+  <div class="modal-box">
+    <p class="modal-title">✈️ Телеграм созлаш</p>
+    <p class="modal-hint">
+      1. @BotFather → /newbot → токен олинг<br>
+      2. Ботингизга /start юборинг<br>
+      3. @userinfobot → Chat ID олинг
+    </p>
+    <label class="field-label">Бот токени</label>
+    <input type="password" id="tgToken" class="field" placeholder="1234567890:AAH-abc..."/>
+    <label class="field-label" style="margin-top:10px">Chat ID</label>
+    <input type="text" id="tgChatId" class="field" placeholder="123456789"/>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeTgModal()">Бекор</button>
+      <button class="modal-save" onclick="saveTg()">Сақлаш ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
 </body>
 </html>
