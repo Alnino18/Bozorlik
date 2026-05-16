@@ -6,6 +6,36 @@ function getTG() {
   };
 }
 
+window.addEventListener("load", () => {
+  const splash = document.getElementById("splash");
+  setTimeout(() => {
+    splash.style.opacity = "0";
+    setTimeout(() => splash.remove(), 600);
+  }, 1500); // 1.5 секунддан кейин йўқолади
+});
+
+
+/* ── KASSA BALANS ── */
+function getCashBalance() {
+  return +localStorage.getItem("bz_cash_balance") || 0;
+}
+
+function setCashBalance(amount) {
+  localStorage.setItem("bz_cash_balance", amount);
+  return amount;
+}
+
+function addToCashBalance() {
+  const inp = document.getElementById("addCashBalance");
+  const val = +inp.value;
+  if (!val || val <= 0) { showToast("⚠️ Миқдорни киритинг"); return; }
+  const newBalance = getCashBalance() + val;
+  setCashBalance(newBalance);
+  inp.value = "";
+  updateStats();
+  showToast("✅ Кассага " + fmt(val) + " сўм қўшилди");
+}
+
 /* ── STATE ── */
 let cashItems = [];
 let debtItems = [];
@@ -77,21 +107,30 @@ function parse(input) {
   return null;
 }
 
-/* ── CASH ── */
+/* ── CASH (НАҚД ТОВАР) ── */
 function addCash() {
   const inp = document.getElementById("cashInp");
   const t = inp.value.trim(); if (!t) return;
   const p = parse(t);
   if (!p) { showToast("⚠️ Формат: Мош 10кг (15000) 150000"); return; }
-  cashItems.push(p); inp.value = ""; inp.focus();
-  renderCash(); updateStats();
+  
+  cashItems.push(p);
+  inp.value = "";
+  inp.focus();
+  renderCash();
+  updateStats();
 }
-function delCash(i)  { cashItems.splice(i,1); renderCash(); updateStats(); }
+function delCash(i) {
+  cashItems.splice(i, 1);
+  renderCash();
+  updateStats();
+}
 function editCash(i) {
   const it = cashItems[i];
   document.getElementById("cashInp").value = it.kg
     ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
-  delCash(i); document.getElementById("cashInp").focus();
+  delCash(i);
+  document.getElementById("cashInp").focus();
 }
 function renderCash() {
   const list = document.getElementById("cashList");
@@ -115,7 +154,7 @@ function renderCash() {
   document.getElementById("cashSubVal").textContent = fmt(total);
 }
 
-/* ── DEBT ── */
+/* ── DEBT (ҚАРЗ ТОВАР) ── */
 function addDebt() {
   const inp  = document.getElementById("debtInp");
   const t    = inp.value.trim(); if (!t) { showToast("⚠️ Товар номини киритинг"); return; }
@@ -123,27 +162,41 @@ function addDebt() {
   if (!p) { showToast("⚠️ Формат: Кийим 150000"); return; }
   const date = document.getElementById("debtDate").value  || today();
   const who  = document.getElementById("debtWho").value.trim();
-  debtItems.push({...p, date, who});
-  inp.value = ""; document.getElementById("debtWho").value = "";
+  debtItems.push({...p, date, who, id: Date.now() + Math.random()});
+  inp.value = "";
+  document.getElementById("debtWho").value = "";
   document.getElementById("debtDate").value = today();
-  inp.focus(); renderDebt(); updateStats();
+  inp.focus();
+  renderDebt();
+  updateStats();
 }
-function delDebt(i)  { debtItems.splice(i,1); renderDebt(); updateStats(); }
+function delDebt(i) {
+  debtItems.splice(i,1);
+  renderDebt();
+  updateStats();
+}
 function editDebt(i) {
   const it = debtItems[i];
   document.getElementById("debtInp").value = it.kg
     ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
   document.getElementById("debtDate").value = it.date || today();
   document.getElementById("debtWho").value  = it.who  || "";
-  delDebt(i); document.getElementById("debtInp").focus();
+  delDebt(i);
+  document.getElementById("debtInp").focus();
 }
 function renderDebt() {
   const list = document.getElementById("debtList");
   const cnt  = debtItems.length;
   document.getElementById("debt-count").textContent = cnt;
-  if (!cnt) { list.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span>Ҳали қарз товар йўқ</div>`; document.getElementById("debtSub").style.display="none"; return; }
+  if (!cnt) { 
+    list.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span>Ҳали қарз товар йўқ</div>`; 
+    document.getElementById("debtSub").style.display="none"; 
+    document.getElementById("debtSelectActions").style.display = "none";
+    return; 
+  }
   list.innerHTML = debtItems.map((it,i) => `
     <div class="item-row debt-row">
+      <input type="checkbox" class="debt-checkbox" data-index="${i}" onchange="updateDebtSelectAll()">
       <div class="item-body">
         <div class="item-name">${esc(it.name)}${it.kg?` <span style="font-weight:400;color:var(--text2);font-size:.78rem">${it.kg}кг</span>`:""}</div>
         <div class="item-sub">📅 ${fmtD(it.date)}${it.who?" · 👤 "+esc(it.who):""}</div>
@@ -157,25 +210,224 @@ function renderDebt() {
   const total = debtItems.reduce((s,it)=>s+it.totalPrice,0);
   document.getElementById("debtSub").style.display = "block";
   document.getElementById("debtSubVal").textContent = fmt(total);
+  document.getElementById("debtSelectActions").style.display = "flex";
+  updateDebtSelectAll();
+}
+
+/* ── DEBT SELECTION FUNCTIONS (жорий қарзлар) ── */
+function getSelectedDebtIndexes() {
+  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
+  const selected = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      selected.push(parseInt(cb.dataset.index));
+    }
+  });
+  return selected;
+}
+
+function deleteSelectedDebts() {
+  const selected = getSelectedDebtIndexes();
+  if (selected.length === 0) {
+    showToast("⚠️ Ҳеч қандай қарз танланмаган");
+    return;
+  }
+  if (!confirm(`${selected.length} та қарзни ўчиришни хохлайсизми?`)) return;
+  
+  selected.sort((a,b) => b - a);
+  selected.forEach(idx => {
+    debtItems.splice(idx, 1);
+  });
+  renderDebt();
+  updateStats();
+  showToast(`✅ ${selected.length} та қарз ўчирилди`);
+}
+
+function selectAllDebts() {
+  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  checkboxes.forEach(cb => {
+    cb.checked = !allChecked;
+  });
+  updateDebtSelectAll();
+}
+
+function updateDebtSelectAll() {
+  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
+  const selectAllBtn = document.getElementById("debtSelectAllBtn");
+  if (!selectAllBtn) return;
+  const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+  const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+  if (checkboxes.length === 0) {
+    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
+  } else if (allChecked) {
+    selectAllBtn.textContent = "✓ Ҳаммасини бекор қилиш";
+  } else if (someChecked) {
+    selectAllBtn.textContent = "☑ Қисман танланган";
+  } else {
+    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
+  }
+}
+
+/* ── ALL DEBTS (БАРЧА ҚАРЗЛАР) ── */
+let allDebtsArray = [];
+
+function loadAllDebts() {
+  allDebtsArray = JSON.parse(localStorage.getItem("bz_debts")||"[]");
+}
+
+function saveAllDebtsToStorage() {
+  localStorage.setItem("bz_debts", JSON.stringify(allDebtsArray));
+}
+
+function renderAllDebts() {
+  loadAllDebts();
+  const list = document.getElementById("allDebtList");
+  const tot  = allDebtsArray.reduce((s,d)=>s+d.totalPrice,0);
+  document.getElementById("allDebtTotal").textContent = fmt(tot);
+  document.getElementById("allDebtCnt").textContent   = allDebtsArray.length;
+  
+  if (!allDebtsArray.length) { 
+    list.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span>Ҳали қарз йўқ</div>`;
+    document.getElementById("allDebtSelectActions").style.display = "none";
+    return; 
+  }
+  
+  list.innerHTML = [...allDebtsArray].reverse().map((d, idx) => {
+    const originalIdx = allDebtsArray.length - 1 - idx;
+    return `
+    <div class="debt-hist-item">
+      <input type="checkbox" class="all-debt-checkbox" data-idx="${originalIdx}" onchange="updateAllDebtSelectAll()">
+      <div style="flex:1">
+        <div class="dhi-top">
+          <span class="dhi-name">${esc(d.name)}${d.kg?` ${d.kg}кг`:""}</span>
+          <span class="dhi-amt">${fmt(d.totalPrice)} сўм</span>
+        </div>
+        <div class="dhi-meta">📅 ${fmtD(d.date)}${d.who?" · 👤 "+esc(d.who):""} · 📍 ${esc(d.market||"—")}</div>
+      </div>
+      <div class="row-btns">
+        <button class="row-btn edit" onclick="editAllDebt(${originalIdx})">✏️</button>
+        <button class="row-btn" onclick="deleteAllDebt(${originalIdx})">✕</button>
+      </div>
+    </div>`;
+  }).join("");
+  
+  document.getElementById("allDebtSelectActions").style.display = "flex";
+  updateAllDebtSelectAll();
+}
+
+function deleteAllDebt(idx) {
+  if (!confirm("Қарзни ўчиришни хохлайсизми?")) return;
+  allDebtsArray.splice(idx, 1);
+  saveAllDebtsToStorage();
+  renderAllDebts();
+  showToast("✅ Қарз ўчирилди");
+}
+
+function editAllDebt(idx) {
+  const it = allDebtsArray[idx];
+  // Таҳрирлаш учун асосий қарзларга ўтказиш
+  document.getElementById("debtInp").value = it.kg
+    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
+  document.getElementById("debtDate").value = it.date || today();
+  document.getElementById("debtWho").value  = it.who  || "";
+  showToast("✏️ Қарзни таҳрирлаш учун 'Қарзга товар' бўлимига ўтинг");
+  goTab('main');
+  document.getElementById("debtInp").focus();
+}
+
+/* Барча қарзларни танлаб ўчириш функциялари */
+function getAllSelectedDebtIndexes() {
+  const checkboxes = document.querySelectorAll("#allDebtList .all-debt-checkbox");
+  const selected = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      selected.push(parseInt(cb.dataset.idx));
+    }
+  });
+  return selected;
+}
+
+function deleteSelectedAllDebts() {
+  const selected = getAllSelectedDebtIndexes();
+  if (selected.length === 0) {
+    showToast("⚠️ Ҳеч қандай қарз танланмаган");
+    return;
+  }
+  if (!confirm(`${selected.length} та қарзни ўчиришни хохлайсизми?`)) return;
+  
+  selected.sort((a,b) => b - a);
+  selected.forEach(idx => {
+    allDebtsArray.splice(idx, 1);
+  });
+  saveAllDebtsToStorage();
+  renderAllDebts();
+  showToast(`✅ ${selected.length} та қарз ўчирилди`);
+}
+
+function selectAllAllDebts() {
+  const checkboxes = document.querySelectorAll("#allDebtList .all-debt-checkbox");
+  const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+  checkboxes.forEach(cb => {
+    cb.checked = !allChecked;
+  });
+  updateAllDebtSelectAll();
+}
+
+function updateAllDebtSelectAll() {
+  const checkboxes = document.querySelectorAll("#allDebtList .all-debt-checkbox");
+  const selectAllBtn = document.getElementById("allDebtSelectAllBtn");
+  if (!selectAllBtn) return;
+  const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+  const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+  if (checkboxes.length === 0) {
+    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
+  } else if (allChecked) {
+    selectAllBtn.textContent = "✓ Ҳаммасини бекор қилиш";
+  } else if (someChecked) {
+    selectAllBtn.textContent = "☑ Қисман танланган";
+  } else {
+    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
+  }
+}
+
+function clearAllDebts() {
+  if(!confirm("БАРЧА қарзлар ўчирилсинми? Бу амални қайтариб бўлмайди!")) return;
+  allDebtsArray = [];
+  saveAllDebtsToStorage();
+  renderAllDebts();
+  showToast("✅ Барча қарзлар тозаланди");
+}
+
+function saveDebts(arr) {
+  const market = getMarket();
+  arr.forEach(d => {
+    allDebtsArray.push({...d, market, savedAt: today()});
+  });
+  saveAllDebtsToStorage();
+  renderAllDebts();
 }
 
 /* ── STATS ── */
 function updateStats() {
-  const kassa     = +document.getElementById("cash").value || 0;
-  const cashTotal = cashItems.reduce((s,it)=>s+it.totalPrice,0);
-  const debtTotal = debtItems.reduce((s,it)=>s+it.totalPrice,0);
-  const remain    = kassa - cashTotal;
-  const pct       = kassa > 0 ? Math.min(cashTotal/kassa*100,100) : 0;
+  const cashBalance = getCashBalance();
+  const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
+  const debtTotal = debtItems.reduce((s,it) => s + it.totalPrice, 0);
+  const spent = cashTotal;  // ФАҚАТ НАҚД ХАРАЖАТ (қарз ҚЎШИЛМАЙДИ!)
+  const balance = cashBalance - spent;  // Қолдиқ = Касса - Нақд
 
-  if (cashItems.length || debtItems.length || kassa) {
+  document.getElementById("income").value = cashBalance;
+
+  if (cashItems.length || debtItems.length || cashBalance > 0) {
     document.getElementById("statsRow").style.display  = "grid";
     document.getElementById("progTrack").style.display = "block";
-    document.getElementById("sc-kassa").textContent  = fmt(kassa)     + " сўм";
+    document.getElementById("sc-kassa").textContent  = fmt(cashBalance) + " сўм";
     document.getElementById("sc-cash").textContent   = fmt(cashTotal) + " сўм";
     document.getElementById("sc-debt").textContent   = fmt(debtTotal) + " сўм";
-    document.getElementById("sc-remain").textContent = fmt(remain)    + " сўм";
+    document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
     const chip = document.getElementById("sc-remain-chip");
-    chip.className = "stat-chip " + (remain < 0 ? "red" : remain < kassa*0.2 ? "orange" : "green");
+    chip.className = "stat-chip " + (balance < 0 ? "red" : balance < cashBalance * 0.2 ? "orange" : "green");
+    const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;  // Фақат нақд бўйича процент
     document.getElementById("progFill").style.width      = pct + "%";
     document.getElementById("progFill").style.background = pct > 80 ? "var(--red)" : pct > 50 ? "var(--orange)" : "var(--blue)";
   } else {
@@ -188,39 +440,49 @@ function updateStats() {
 function finish() {
   if (!cashItems.length && !debtItems.length) { showToast("⚠️ Товарлар йўқ!"); return; }
   if (!selectedMarket) { showToast("⚠️ Бозорни танланг!"); return; }
-  const market    = getMarket();
-  const kassa     = +document.getElementById("cash").value || 0;
-  const cashTotal = cashItems.reduce((s,it)=>s+it.totalPrice,0);
-  const debtTotal = debtItems.reduce((s,it)=>s+it.totalPrice,0);
-  const remain    = kassa - cashTotal;
-  const now       = new Date();
-  const dateStr   = now.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
-  const timeStr   = now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  
+  const market = getMarket();
+  const cashBalance = getCashBalance();
+  const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
+  const debtTotal = debtItems.reduce((s,it) => s + it.totalPrice, 0);
+  const spent = cashTotal;  // ФАҚАТ НАҚД
+  const balance = cashBalance - spent;  // Қолдиқ = Касса - Нақд
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const timeStr = now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
 
-  let r = `🛒 ЗАКУПКА ҲИСОБОТИ\n📅 ${dateStr} · 🕐 ${timeStr}\n📍 Бозор: ${market}\n🏦 Касса: ${fmt(kassa)} сўм\n──────────────────\n`;
+  let r = `${dateStr} · 🕐 ${timeStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n──────────────────\n`;
   if (cashItems.length) {
     r += `💰 Нақд товарлар:\n`;
     cashItems.forEach(it => { r += `• ${it.name}`; if(it.kg) r+=` ${it.kg}кг (${fmt(it.unitPrice)})`; r+=` — ${fmt(it.totalPrice)} сўм\n`; });
     r += "\n";
   }
   if (debtItems.length) {
-    r += `📋 Қарз товарлар:\n`;
+    r += `📋 Қарз товарлар (кассага таъсир қилмайди):\n`;
     debtItems.forEach(it => { r+=`• ${it.name}`; if(it.kg) r+=` ${it.kg}кг`; r+=` — ${fmt(it.totalPrice)} сўм (${fmtD(it.date)}`; if(it.who) r+=` · ${it.who}`; r+=`)\n`; });
     r += "\n";
   }
-  r += `──────────────────\n💰 Умумий нақд: ${fmt(cashTotal)} сўм\n💵 Қолдиқ: ${fmt(remain)} сўм`;
-  if (debtItems.length) r += `\n📋 Жами қарз: ${fmt(debtTotal)} сўм`;
+  r += `──────────────────\n💰 Нақд харажат: ${fmt(cashTotal)} сўм`;
+  if (debtItems.length) r += `\n📋 Қарз харажат: ${fmt(debtTotal)} сўм (ҳозир тўланмайди)`;
+  r += `\n📊 Жами харажат (нақд): ${fmt(cashTotal + debtTotal)} сўм`;
+  r += `\n✅ Кассада қолди: ${fmt(balance)} сўм`;
 
-  saveHistory({ market, kassa, cashTotal, debtTotal, remain, cashItems:[...cashItems], debtItems:[...debtItems], date:today(), time:timeStr });
+  saveHistory({ market, cashBalance, cashTotal, debtTotal, spent, balance, cashItems:[...cashItems], debtItems:[...debtItems], date:today(), time:timeStr });
   saveDebts([...debtItems]);
 
+  setCashBalance(balance);
+
   const pre = document.getElementById("report");
-  pre.textContent = r; pre.style.display = "block";
+  pre.textContent = r;
+  pre.style.display = "block";
   pre.scrollIntoView({ behavior:"smooth", block:"nearest" });
   sendTG(r);
 
-  cashItems = []; debtItems = [];
-  renderCash(); renderDebt(); updateStats();
+  cashItems = [];
+  debtItems = [];
+  renderCash();
+  renderDebt();
+  updateStats();
   showToast("✅ Тугатилди!");
 }
 
@@ -276,12 +538,12 @@ function renderHistory() {
   filt.forEach(e=>{ const d=e.date||"?"; if(!grps[d]) grps[d]=[]; grps[d].push(e); });
   cont.innerHTML = Object.keys(grps).sort((a,b)=>b.localeCompare(a)).map(day=>{
     const es = grps[day];
-    const dt = es.reduce((s,e)=>s+(e.cashTotal||0),0);
+    const dt = es.reduce((s,e)=>s+(e.spent||e.cashTotal||0),0);
     return `<div class="hist-day">
-      <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм</span></div>
+      <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм харажат</span></div>
       ${es.map(e=>`<div class="hist-entry">
-        <div class="hist-top"><span class="hist-mkt">📍 ${esc(e.market)}</span><span class="hist-rem">+${fmt(e.remain)} қолди</span></div>
-        <div class="hist-meta">💰 ${fmt(e.cashTotal)} сўм${e.debtTotal?` · 📋 ${fmt(e.debtTotal)} сўм`:""} · 🕐 ${e.time||""}</div>
+        <div class="hist-top"><span class="hist-mkt">📍 ${esc(e.market)}</span><span class="hist-rem ${(e.balance??e.remain??0)<0?'neg':''}">Қолдиқ: ${fmt(e.balance??e.remain??0)} сўм</span></div>
+        <div class="hist-meta">💵 Касса: ${fmt(e.cashBalance??e.kassa??0)} · 💰 Харажат: ${fmt(e.spent??e.cashTotal??0)} сўм${e.debtTotal?` · 📋 Қарз: ${fmt(e.debtTotal)} сўм`:""} · 🕐 ${e.time||""}</div>
         ${e.cashItems&&e.cashItems.length?`<div class="hist-items">${e.cashItems.slice(0,3).map(i=>esc(i.name)).join(", ")}${e.cashItems.length>3?"…":""}</div>`:""}
       </div>`).join("")}
     </div>`;
@@ -290,34 +552,6 @@ function renderHistory() {
 function clearHistory() {
   if(!confirm("Барча тарих ўчирилсинми?")) return;
   localStorage.removeItem("bz_history"); renderHistory();
-}
-
-/* ── ALL DEBTS ── */
-function saveDebts(arr) {
-  const market = getMarket();
-  const all = JSON.parse(localStorage.getItem("bz_debts")||"[]");
-  arr.forEach(d=>all.push({...d, market, savedAt:today()}));
-  localStorage.setItem("bz_debts", JSON.stringify(all));
-}
-function renderAllDebts() {
-  const all  = JSON.parse(localStorage.getItem("bz_debts")||"[]");
-  const list = document.getElementById("allDebtList");
-  const tot  = all.reduce((s,d)=>s+d.totalPrice,0);
-  document.getElementById("allDebtTotal").textContent = fmt(tot);
-  document.getElementById("allDebtCnt").textContent   = all.length;
-  if (!all.length) { list.innerHTML=`<div class="empty-state"><span class="empty-icon">📋</span>Ҳали қарз йўқ</div>`; return; }
-  list.innerHTML = [...all].reverse().map(d=>`
-    <div class="debt-hist-item">
-      <div class="dhi-top">
-        <span class="dhi-name">${esc(d.name)}${d.kg?` ${d.kg}кг`:""}</span>
-        <span class="dhi-amt">${fmt(d.totalPrice)} сўм</span>
-      </div>
-      <div class="dhi-meta">📅 ${fmtD(d.date)}${d.who?" · 👤 "+esc(d.who):""} · 📍 ${esc(d.market||"—")}</div>
-    </div>`).join("");
-}
-function clearAllDebts() {
-  if(!confirm("Барча қарзлар ўчирилсинми?")) return;
-  localStorage.removeItem("bz_debts"); renderAllDebts();
 }
 
 /* ── CHARTS ── */
@@ -342,7 +576,7 @@ function updateCharts() {
   const cb = isDark ? "#1c1f26" : "#ffffff";
 
   const byDay = {};
-  hist.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+(e.cashTotal||0); });
+  hist.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+(e.spent||e.cashTotal||0); });
   const days = Object.keys(byDay).sort();
 
   if (barInst) barInst.destroy();
@@ -350,7 +584,7 @@ function updateCharts() {
     type:"bar",
     data:{
       labels: days.map(d=>fmtD(d)),
-      datasets:[{ label:"Нақд харажат", data:days.map(d=>byDay[d]),
+      datasets:[{ label:"Жами харажат", data:days.map(d=>byDay[d]),
         backgroundColor:"rgba(37,99,235,0.75)", borderRadius:6, borderSkipped:false }]
     },
     options:{ responsive:true, plugins:{ legend:{labels:{color:tc,font:{size:12}}}, tooltip:{callbacks:{label:c=>fmt(c.raw)+" сўм"}} },
@@ -358,7 +592,7 @@ function updateCharts() {
   });
 
   const byMkt = {};
-  hist.forEach(e=>{ byMkt[e.market]=(byMkt[e.market]||0)+(e.cashTotal||0); });
+  hist.forEach(e=>{ byMkt[e.market]=(byMkt[e.market]||0)+(e.spent||e.cashTotal||0); });
   const mkts = Object.keys(byMkt);
   if (pieInst) pieInst.destroy();
   if (!mkts.length) return;
@@ -390,7 +624,15 @@ document.addEventListener("DOMContentLoaded", ()=>{
   document.getElementById("debtDate").value = today();
   document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
   renderCash(); renderDebt();
-  // танловни бошланғич қилиш
+  loadAllDebts();
+  renderAllDebts();
+  
+  const cashBalance = getCashBalance();
+  document.getElementById("income").value = cashBalance;
+  document.getElementById("income").readOnly = true;
+  document.getElementById("income").style.background = "var(--bg)";
+  updateStats();
+  
   const firstMarketBtn = document.querySelector(".market-btn");
   if (firstMarketBtn) {
     firstMarketBtn.classList.add("selected");

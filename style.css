@@ -19,6 +19,56 @@
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
 }
 
+/* ALL DEBT CHECKBOX */
+.all-debt-checkbox {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--purple);
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.debt-hist-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--purple-bg);
+  border: 1px solid rgba(124,58,237,.15);
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.debt-hist-item .dhi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#splash {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #4db8ff, #007aff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.6s ease;
+}
+
+.splash-logo {
+  width: 220px;
+  animation: fadeUp 1.2s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 body.dark {
   --bg: #0f1117;
   --surface: #1c1f26;
@@ -156,6 +206,24 @@ header {
   background: var(--surface);
 }
 .field-label { font-size: .75rem; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
+
+/* CASH DISPLAY */
+.cash-display {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  background: var(--blue-bg);
+  border-color: var(--blue);
+  color: var(--blue);
+  margin-bottom: 8px;
+}
+.cash-add-row {
+  display: flex;
+  gap: 8px;
+}
+.cash-add-row .field {
+  margin-bottom: 0;
+}
 
 /* MARKET GRID */
 .market-grid {
@@ -472,6 +540,7 @@ header {
 .hist-top   { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .hist-mkt   { font-weight: 700; font-size: .9rem; }
 .hist-rem   { font-weight: 700; color: var(--green); font-size: .88rem; }
+.hist-rem.neg { color: var(--red); }
 .hist-meta  { font-size: .73rem; color: var(--text2); }
 .hist-items { font-size: .72rem; color: var(--text2); margin-top: 3px; font-style: italic; }
 
@@ -571,5 +640,41 @@ header {
   white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0,0,0,.2);
 }
+
+/* DEBT CHECKBOX */
+.debt-checkbox {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--purple);
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.select-debts-btn, .delete-selected-btn {
+  transition: all .15s;
+}
+.select-debts-btn:active, .delete-selected-btn:active {
+  transform: scale(.97);
+}
+
+/* CASH DISPLAY */
+.cash-display {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  background: var(--blue-bg);
+  border-color: var(--blue);
+  color: var(--blue);
+  margin-bottom: 8px;
+}
+.cash-add-row {
+  display: flex;
+  gap: 8px;
+}
+.cash-add-row .field {
+  margin-bottom: 0;
+}
+
 body.dark .toast { background: #f1f5f9; color: #111827; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

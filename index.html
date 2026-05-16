@@ -15,7 +15,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-
+<div id="splash">
+    <img src="splash.png" alt="Bozorlik" class="splash-logo"/>
+</div>
 <!-- HEADER -->
 <header>
   <div class="h-brand">
@@ -75,8 +77,15 @@
         </button>
       </div>
       <input id="customMarket" class="field" placeholder="Бозор номи..." style="display:none; margin-top:8px"/>
-      <p class="card-title" style="margin-top:16px">🏦 Касса</p>
-      <input id="cash" type="number" class="field" placeholder="Касса суммаси (сўм)" oninput="updateStats()"/>
+      
+      <p class="card-title" style="margin-top:16px">💵 Кассадаги пул</p>
+      <div class="cash-row">
+        <input id="income" type="text" class="field cash-display" readonly placeholder="0 сўм"/>
+        <div class="cash-add-row">
+          <input id="addCashBalance" type="number" class="field inp-flex" placeholder="➕ Кассага пул қўшиш"/>
+          <button class="add-btn green-btn" onclick="addToCashBalance()">+</button>
+        </div>
+      </div>
     </div>
 
     <!-- live stats -->
@@ -86,7 +95,7 @@
         <span class="sc-val" id="sc-kassa">0</span>
       </div>
       <div class="stat-chip orange">
-        <span class="sc-label">Нақд</span>
+        <span class="sc-label">Нақд харажат</span>
         <span class="sc-val" id="sc-cash">0</span>
       </div>
       <div class="stat-chip purple">
@@ -144,6 +153,12 @@
       <div class="subtotal debt-subtotal" id="debtSub" style="display:none">
         Жами қарз: <b id="debtSubVal">0</b> сўм
       </div>
+      
+      <!-- Қарзларни танлаб ўчириш тугмалари -->
+      <div id="debtSelectActions" style="display: none; gap: 8px; margin-top: 12px;">
+        <button class="select-debts-btn" onclick="selectAllDebts()" id="debtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
+        <button class="delete-selected-btn" onclick="deleteSelectedDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
+      </div>
     </div>
 
     <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
@@ -152,17 +167,24 @@
   </div>
 
   <!-- ═══ TAB: DEBT ═══ -->
-  <div class="tab" id="tab-debt">
-    <div class="card">
-      <p class="card-title">📋 Барча қарзлар</p>
-      <div class="debt-summary" id="debtSummary">
-        Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
-      </div>
-      <div id="allDebtList" class="item-list"></div>
-      <button class="danger-btn" onclick="clearAllDebts()">🗑 Барча қарзларни тозалаш</button>
+<div class="tab" id="tab-debt">
+  <div class="card">
+    <p class="card-title">📋 Барча қарзлар</p>
+    <div class="debt-summary" id="debtSummary">
+      Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
     </div>
-    <div style="height:80px"></div>
+    
+    <!-- Танлаб ўчириш тугмалари -->
+    <div id="allDebtSelectActions" style="display: none; gap: 8px; margin-bottom: 12px;">
+      <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
+      <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
+    </div>
+    
+    <div id="allDebtList" class="item-list"></div>
+    <button class="danger-btn" onclick="clearAllDebts()">🗑 Барча қарзларни тозалаш</button>
   </div>
+  <div style="height:80px"></div>
+</div>
 
   <!-- ═══ TAB: HISTORY ═══ -->
   <div class="tab" id="tab-history">
@@ -180,7 +202,7 @@
   <!-- ═══ TAB: CHART ═══ -->
   <div class="tab" id="tab-chart">
     <div class="card">
-      <p class="card-title">📊 Кунлик харажат</p>
+      <p class="card-title">📊 Кунлик жами харажат</p>
       <div class="period-row">
         <button class="period-btn active" id="pb-week" onclick="setPeriod('week')">Ҳафта</button>
         <button class="period-btn" id="pb-month" onclick="setPeriod('month')">Ой</button>
@@ -202,8 +224,8 @@
   <div class="modal-box">
     <p class="modal-title">✈️ Телеграм созлаш</p>
     <p class="modal-hint">
-      1. @BotFather → /newbot → токен олинг<br>
-      2. Ботингизга /start юборинг<br>
+      1. @BotFather → /newbot → токен олинг<br/>
+      2. Ботингизга /start юборинг<br/>
       3. @userinfobot → Chat ID олинг
     </p>
     <label class="field-label">Бот токени</label>
