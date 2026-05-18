@@ -694,6 +694,15 @@ textarea.field {
   border-left: 2px solid var(--blue);
 }
 
+/* Tugma uslubi */
+.input-row .add-btn {
+  width: auto;
+  padding: 0 20px;
+  background: var(--blue);
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
 
 body.dark .toast { background: #f1f5f9; color: #111827; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
