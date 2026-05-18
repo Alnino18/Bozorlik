@@ -131,8 +131,22 @@
         Жами нақд: <b id="cashSubVal">0</b> сўм
       </div>
     </div>
+    
+    <div class="card">
+    <div class="section-head">
+      <span class="section-icon">📝</span>
+      <span class="section-label">Изоҳ / Эслатма</span>
+    </div>
+    <textarea id="noteField" class="field" rows="3" placeholder="Мас.: Тўлов қилинди, етказиб бериш кутилмоқда..."></textarea>
+  </div>
+    <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
+    <pre id="report" class="report-box" style="display:none"></pre>
+    <div style="height:80px"></div>
+  </div>
 
-    <!-- қарз товар -->
+  <!-- ═══ TAB: DEBT ═══ -->
+<div class="tab" id="tab-debt">
+  <!-- қарз товар -->
     <div class="card">
       <div class="section-head">
         <span class="section-icon debt-icon">📋</span>
@@ -154,20 +168,6 @@
         Жами қарз: <b id="debtSubVal">0</b> сўм
       </div>
       
-      <!-- Қарзларни танлаб ўчириш тугмалари -->
-      <div id="debtSelectActions" style="display: none; gap: 8px; margin-top: 12px;">
-        <button class="select-debts-btn" onclick="selectAllDebts()" id="debtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
-        <button class="delete-selected-btn" onclick="deleteSelectedDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
-      </div>
-    </div>
-
-    <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
-    <pre id="report" class="report-box" style="display:none"></pre>
-    <div style="height:80px"></div>
-  </div>
-
-  <!-- ═══ TAB: DEBT ═══ -->
-<div class="tab" id="tab-debt">
   <div class="card">
     <p class="card-title">📋 Барча қарзлар</p>
     <div class="debt-summary" id="debtSummary">
