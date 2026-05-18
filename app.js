@@ -157,18 +157,44 @@ function renderCash() {
 /* ── DEBT (ҚАРЗ ТОВАР) ── */
 function addDebt() {
   const inp  = document.getElementById("debtInp");
-  const t    = inp.value.trim(); if (!t) { showToast("⚠️ Товар номини киритинг"); return; }
+  const t    = inp.value.trim(); 
+  if (!t) { 
+    showToast("⚠️ Товар номини киритинг"); 
+    return; 
+  }
   const p    = parse(t);
-  if (!p) { showToast("⚠️ Формат: Кийим 150000"); return; }
+  if (!p) { 
+    showToast("⚠️ Формат: Кийим 150000 ёки Мош 10кг (15000) 150000"); 
+    return; 
+  }
   const date = document.getElementById("debtDate").value  || today();
   const who  = document.getElementById("debtWho").value.trim();
-  debtItems.push({...p, date, who, id: Date.now() + Math.random()});
+  const market = getMarket();
+  
+  const newDebt = {
+    ...p, 
+    date, 
+    who, 
+    market: market,
+    savedAt: today(),
+    id: Date.now() + Math.random()
+  };
+  
+  // FAQAT BARCHA QARZLARGA qo'shamiz (joriy debtItems ga EMAS!)
+  const allDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+  allDebts.push(newDebt);
+  localStorage.setItem("bz_debts", JSON.stringify(allDebts));
+  
+  // Formani tozalash
   inp.value = "";
   document.getElementById("debtWho").value = "";
   document.getElementById("debtDate").value = today();
   inp.focus();
-  renderDebt();
-  updateStats();
+  
+  // Faqat barcha qarzlar ro'yxatini yangilaymiz
+  renderAllDebts();
+  
+  showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
 }
 function delDebt(i) {
   debtItems.splice(i,1);
@@ -438,37 +464,35 @@ function updateStats() {
 
 /* ── FINISH ── */
 function finish() {
-  if (!cashItems.length && !debtItems.length) { showToast("⚠️ Товарлар йўқ!"); return; }
-  if (!selectedMarket) { showToast("⚠️ Бозорни танланг!"); return; }
+  if (!cashItems.length) { 
+    showToast("⚠️ Товарлар йўқ!"); 
+    return; 
+  }
+  if (!selectedMarket) { 
+    showToast("⚠️ Бозорни танланг!"); 
+    return; 
+  }
   
   const market = getMarket();
   const cashBalance = getCashBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const debtTotal = debtItems.reduce((s,it) => s + it.totalPrice, 0);
-  const spent = cashTotal;  // ФАҚАТ НАҚД
-  const balance = cashBalance - spent;  // Қолдиқ = Касса - Нақд
+  const debtTotal = 0; // Joriy qarzlar yo'q (addDebt da qo'shilmaydi)
+  const spent = cashTotal;
+  const balance = cashBalance - spent;
   const now = new Date();
   const dateStr = now.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
   const timeStr = now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  const note = getNote();
 
-  let r = `${dateStr} · 🕐 ${timeStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n──────────────────\n`;
+  let r = `Расход · ${dateStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n`;
   if (cashItems.length) {
-    r += `💰 Нақд товарлар:\n`;
     cashItems.forEach(it => { r += `• ${it.name}`; if(it.kg) r+=` ${it.kg}кг (${fmt(it.unitPrice)})`; r+=` — ${fmt(it.totalPrice)} сўм\n`; });
     r += "\n";
   }
-  if (debtItems.length) {
-    r += `📋 Қарз товарлар (кассага таъсир қилмайди):\n`;
-    debtItems.forEach(it => { r+=`• ${it.name}`; if(it.kg) r+=` ${it.kg}кг`; r+=` — ${fmt(it.totalPrice)} сўм (${fmtD(it.date)}`; if(it.who) r+=` · ${it.who}`; r+=`)\n`; });
-    r += "\n";
-  }
-  r += `──────────────────\n💰 Нақд харажат: ${fmt(cashTotal)} сўм`;
-  if (debtItems.length) r += `\n📋 Қарз харажат: ${fmt(debtTotal)} сўм (ҳозир тўланмайди)`;
-  r += `\n📊 Жами харажат (нақд): ${fmt(cashTotal + debtTotal)} сўм`;
-  r += `\n✅ Кассада қолди: ${fmt(balance)} сўм`;
+  r += `\n📊 Обший: ${fmt(cashTotal)} сўм`;
+  r += `\n✅ Колди: ${fmt(balance)} сўм`;
 
-  saveHistory({ market, cashBalance, cashTotal, debtTotal, spent, balance, cashItems:[...cashItems], debtItems:[...debtItems], date:today(), time:timeStr });
-  saveDebts([...debtItems]);
+  saveHistory({ market, cashBalance, cashTotal, spent, balance, cashItems:[...cashItems], date:today(), time:timeStr, note: note });
 
   setCashBalance(balance);
 
@@ -479,10 +503,9 @@ function finish() {
   sendTG(r);
 
   cashItems = [];
-  debtItems = [];
   renderCash();
-  renderDebt();
   updateStats();
+  clearNote();
   showToast("✅ Тугатилди!");
 }
 
