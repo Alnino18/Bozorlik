@@ -565,7 +565,18 @@ function clearHistory() {
   if(!confirm("Барча тарих ўчирилсинми?")) return;
   localStorage.removeItem("bz_history"); renderHistory();
 }
-
+/* ── TABS ── */
+function goTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  document.getElementById("ni-" + name).classList.add("active");
+  if (name === "debt") {
+    renderAllDebts();
+  }
+  if (name === "history") renderHistory();
+  if (name === "chart")   updateCharts();
+}
 /* ── CHARTS ── */
 function setPeriod(p) {
   period = p;
