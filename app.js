@@ -180,7 +180,7 @@ function addDebt() {
     id: Date.now() + Math.random()
   };
   
-  // FAQAT BARCHA QARZLARGA qo'shamiz (joriy debtItems ga EMAS!)
+  // Барча қарзларга қўшамиз
   const allDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
   allDebts.push(newDebt);
   localStorage.setItem("bz_debts", JSON.stringify(allDebts));
@@ -191,11 +191,11 @@ function addDebt() {
   document.getElementById("debtDate").value = today();
   inp.focus();
   
-  // Faqat barcha qarzlar ro'yxatini yangilaymiz
   renderAllDebts();
   
   showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
 }
+
 function delDebt(i) {
   debtItems.splice(i,1);
   renderDebt();
@@ -352,17 +352,16 @@ function deleteAllDebt(idx) {
 
 function editAllDebt(idx) {
   const it = allDebtsArray[idx];
-  // Таҳрирлаш учун асосий қарзларга ўтказиш
   document.getElementById("debtInp").value = it.kg
     ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
   document.getElementById("debtDate").value = it.date || today();
   document.getElementById("debtWho").value  = it.who  || "";
-  showToast("✏️ Қарзни таҳрирлаш учун 'Қарзга товар' бўлимига ўтинг");
-  goTab('main');
+  // Eski qarzni o'chirib, yangisini qo'shish uchun
+  deleteAllDebt(idx);
   document.getElementById("debtInp").focus();
+  showToast("✏️ Қарзни таҳрирлаб, 'Қўшиш' тугмасини босинг");
 }
 
-/* Барча қарзларни танлаб ўчириш функциялари */
 function getAllSelectedDebtIndexes() {
   const checkboxes = document.querySelectorAll("#allDebtList .all-debt-checkbox");
   const selected = [];
@@ -425,35 +424,25 @@ function clearAllDebts() {
   showToast("✅ Барча қарзлар тозаланди");
 }
 
-function saveDebts(arr) {
-  const market = getMarket();
-  arr.forEach(d => {
-    allDebtsArray.push({...d, market, savedAt: today()});
-  });
-  saveAllDebtsToStorage();
-  renderAllDebts();
-}
-
-/* ── STATS ── */
+/* ── STATS ── (qarz ko'rsatilmaydi) */
 function updateStats() {
   const cashBalance = getCashBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const debtTotal = debtItems.reduce((s,it) => s + it.totalPrice, 0);
-  const spent = cashTotal;  // ФАҚАТ НАҚД ХАРАЖАТ (қарз ҚЎШИЛМАЙДИ!)
-  const balance = cashBalance - spent;  // Қолдиқ = Касса - Нақд
+  const spent = cashTotal;
+  const balance = cashBalance - spent;
 
   document.getElementById("income").value = cashBalance;
 
-  if (cashItems.length || debtItems.length || cashBalance > 0) {
+  if (cashItems.length || cashBalance > 0) {
     document.getElementById("statsRow").style.display  = "grid";
     document.getElementById("progTrack").style.display = "block";
     document.getElementById("sc-kassa").textContent  = fmt(cashBalance) + " сўм";
     document.getElementById("sc-cash").textContent   = fmt(cashTotal) + " сўм";
-    document.getElementById("sc-debt").textContent   = fmt(debtTotal) + " сўм";
+    document.getElementById("sc-debt").textContent   = "0 сўм";
     document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
     const chip = document.getElementById("sc-remain-chip");
     chip.className = "stat-chip " + (balance < 0 ? "red" : balance < cashBalance * 0.2 ? "orange" : "green");
-    const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;  // Фақат нақд бўйича процент
+    const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
     document.getElementById("progFill").style.width      = pct + "%";
     document.getElementById("progFill").style.background = pct > 80 ? "var(--red)" : pct > 50 ? "var(--orange)" : "var(--blue)";
   } else {
@@ -484,7 +473,7 @@ function finish() {
   const timeStr = now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
   const note = getNote();
 
-  let r = `Расход · ${dateStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n`;
+  let r = `Расход · ${dateStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n\n`;
   if (cashItems.length) {
     cashItems.forEach(it => { r += `• ${it.name}`; if(it.kg) r+=` ${it.kg}кг (${fmt(it.unitPrice)})`; r+=` — ${fmt(it.totalPrice)} сўм\n`; });
     r += "\n";
