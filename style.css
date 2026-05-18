@@ -109,7 +109,7 @@ header {
 }
 
 .h-brand { display: flex; align-items: center; gap: 10px; }
-.h-logo  { width: 32px; height: 32px; border-radius: 9px; }
+.h-logo  { width: 90px; height: 90px; border-radius: 9px; }
 .h-title { font-size: 1.1rem; font-weight: 700; letter-spacing: .3px; color: var(--blue); }
 .h-actions { display: flex; gap: 8px; }
 
