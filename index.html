@@ -148,33 +148,28 @@
 <div class="tab" id="tab-debt">
   <!-- қарз товар -->
     <div class="card">
-      <div class="section-head">
-        <span class="section-icon debt-icon">📋</span>
-        <span class="section-label">Қарзга товар</span>
-        <span class="count-badge debt-badge" id="debt-count">0</span>
-      </div>
-      <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
-      <div class="input-row">
-        <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
-               onkeydown="if(event.key==='Enter')addDebt()"/>
-        <button class="add-btn purple-btn" onclick="addDebt()">+</button>
-      </div>
-      <div class="two-col">
-        <input type="date" id="debtDate" class="field"/>
-        <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
-      </div>
-      <div id="debtList" class="item-list"></div>
-      <div class="subtotal debt-subtotal" id="debtSub" style="display:none">
-        Жами қарз: <b id="debtSubVal">0</b> сўм
-      </div>
-      
+    <div class="section-head">
+      <span class="section-icon debt-icon">📋</span>
+      <span class="section-label">Қарзга товар қўшиш</span>
+    </div>
+    <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
+    <div class="input-row">
+      <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
+             onkeydown="if(event.key==='Enter')addDebt()"/>
+      <button class="add-btn" onclick="addDebt()" style="background: var(--blue);">➕ Қўшиш</button>
+    </div>
+    <div class="two-col">
+      <input type="date" id="debtDate" class="field"/>
+      <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
+    </div>
+  </div>
+
   <div class="card">
     <p class="card-title">📋 Барча қарзлар</p>
     <div class="debt-summary" id="debtSummary">
       Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
     </div>
     
-    <!-- Танлаб ўчириш тугмалари -->
     <div id="allDebtSelectActions" style="display: none; gap: 8px; margin-bottom: 12px;">
       <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
       <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
