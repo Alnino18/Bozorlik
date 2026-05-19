@@ -22,7 +22,6 @@
 <header>
   <div class="h-brand">
     <img src="icon-192.png" class="h-logo" alt=""/>
-    <!--<span class="h-title">Bozorlik</span>-->
   </div>
   <div class="h-actions">
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
@@ -80,7 +79,10 @@
       
       <p class="card-title" style="margin-top:16px">💵 Кассадаги пул</p>
       <div class="cash-row">
-        <input id="income" type="text" class="field cash-display" readonly placeholder="0 сўм"/>
+        <div class="cash-display-box">
+          <span class="cash-label">Жорий касса:</span>
+          <input id="income" type="text" class="field cash-display" readonly placeholder="0 сўм"/>
+        </div>
         <div class="cash-add-row">
           <input id="addCashBalance" type="number" class="field inp-flex" placeholder="Кассага пул қўшиш"/>
           <button class="add-btn green-btn" onclick="addToCashBalance()">+</button>
@@ -88,29 +90,29 @@
       </div>
     </div>
 
-    <!-- live stats -->
-    <div class="stats-row" id="statsRow" style="display:none">
+    <!-- live stats (har doim ko'rinadi) -->
+    <div class="stats-row" id="statsRow">
       <div class="stat-chip blue">
         <span class="sc-label">Касса</span>
-        <span class="sc-val" id="sc-kassa">0</span>
+        <span class="sc-val" id="sc-kassa">0 сўм</span>
       </div>
       <div class="stat-chip orange">
         <span class="sc-label">Нақд харажат</span>
-        <span class="sc-val" id="sc-cash">0</span>
+        <span class="sc-val" id="sc-cash">0 сўм</span>
       </div>
       <div class="stat-chip purple">
         <span class="sc-label">Қарз</span>
-        <span class="sc-val" id="sc-debt">0</span>
+        <span class="sc-val" id="sc-debt">0 сўм</span>
       </div>
       <div class="stat-chip green" id="sc-remain-chip">
         <span class="sc-label">Қолдиқ</span>
-        <span class="sc-val" id="sc-remain">0</span>
+        <span class="sc-val" id="sc-remain">0 сўм</span>
       </div>
     </div>
 
-    <!-- progress bar -->
-    <div class="prog-track" id="progTrack" style="display:none">
-      <div class="prog-fill" id="progFill"></div>
+    <!-- progress bar (har doim ko'rinadi) -->
+    <div class="prog-track" id="progTrack">
+      <div class="prog-fill" id="progFill" style="width:0%"></div>
     </div>
 
     <!-- нақд товар -->
@@ -133,53 +135,54 @@
     </div>
     
     <div class="card">
-    <div class="section-head">
-      <span class="section-icon">📝</span>
-      <span class="section-label">Изоҳ / Эслатма</span>
+      <div class="section-head">
+        <span class="section-icon">📝</span>
+        <span class="section-label">Изоҳ / Эслатма</span>
+      </div>
+      <textarea id="noteField" class="field" rows="3" placeholder="Изоҳ киритинг..."></textarea>
     </div>
-    <textarea id="noteField" class="field" rows="3" placeholder="..." style="height: 180px";></textarea>
-  </div>
+    
     <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
     <pre id="report" class="report-box" style="display:none"></pre>
     <div style="height:80px"></div>
   </div>
 
   <!-- ═══ TAB: DEBT ═══ -->
-<div class="tab" id="tab-debt">
-  <!-- қарз товар -->
+  <div class="tab" id="tab-debt">
+    <!-- қарз товар -->
     <div class="card">
-    <div class="section-head">
-      <span class="section-icon debt-icon">📋</span>
-      <span class="section-label">Қарзга товар қўшиш</span>
+      <div class="section-head">
+        <span class="section-icon debt-icon">📋</span>
+        <span class="section-label">Қарзга товар қўшиш</span>
+      </div>
+      <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
+      <div class="input-row">
+        <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
+               onkeydown="if(event.key==='Enter')addDebt()"/>
+        <button class="add-btn" onclick="addDebt()" style="background: var(--blue);">+</button>
+      </div>
+      <div class="two-col">
+        <input type="date" id="debtDate" class="field"/>
+        <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
+      </div>
     </div>
-    <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
-    <div class="input-row">
-      <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
-             onkeydown="if(event.key==='Enter')addDebt()"/>
-      <button class="add-btn" onclick="addDebt()" style="background: var(--blue);">+</button>
-    </div>
-    <div class="two-col">
-      <input type="date" id="debtDate" class="field"/>
-      <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
-    </div>
-  </div>
 
-  <div class="card">
-    <p class="card-title">📋 Барча қарзлар</p>
-    <div class="debt-summary" id="debtSummary">
-      Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
+    <div class="card">
+      <p class="card-title">📋 Барча қарзлар</p>
+      <div class="debt-summary" id="debtSummary">
+        Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
+      </div>
+      
+      <div id="allDebtSelectActions" style="display: none; gap: 8px; margin-bottom: 12px;">
+        <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
+        <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
+      </div>
+      
+      <div id="allDebtList" class="item-list"></div>
+      <button class="danger-btn" onclick="clearAllDebts()">🗑 Барча қарзларни тозалаш</button>
     </div>
-    
-    <div id="allDebtSelectActions" style="display: none; gap: 8px; margin-bottom: 12px;">
-      <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
-      <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
-    </div>
-    
-    <div id="allDebtList" class="item-list"></div>
-    <button class="danger-btn" onclick="clearAllDebts()">🗑 Барча қарзларни тозалаш</button>
+    <div style="height:80px"></div>
   </div>
-  <div style="height:80px"></div>
-</div>
 
   <!-- ═══ TAB: HISTORY ═══ -->
   <div class="tab" id="tab-history">
