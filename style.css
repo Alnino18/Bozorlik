@@ -207,19 +207,34 @@ header {
 }
 .field-label { font-size: .75rem; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
 
-/* CASH DISPLAY */
+/* Kassa ko'rinishi uchun */
+.cash-display-box {
+  margin-bottom: 8px;
+}
+
+.cash-label {
+  display: block;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 4px;
+  letter-spacing: .5px;
+}
+
 .cash-display {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.3rem;
+  font-weight: 800;
   text-align: center;
   background: var(--blue-bg);
   border-color: var(--blue);
   color: var(--blue);
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
+
 .cash-add-row {
   display: flex;
   gap: 8px;
+  margin-top: 8px;
 }
 .cash-add-row .field {
   margin-bottom: 0;
@@ -475,18 +490,6 @@ header {
   margin-bottom: 12px;
 }
 
-.debt-hist-item {
-  padding: 11px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--purple-bg);
-  border: 1px solid rgba(124,58,237,.15);
-  margin-bottom: 6px;
-}
-.dhi-top  { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.dhi-name { font-weight: 700; font-size: .9rem; flex: 1; }
-.dhi-amt  { font-weight: 700; color: var(--purple); font-size: .9rem; white-space: nowrap; }
-.dhi-meta { font-size: .72rem; color: var(--text2); margin-top: 3px; }
-
 .danger-btn {
   width: 100%;
   margin-top: 12px;
@@ -543,6 +546,15 @@ header {
 .hist-rem.neg { color: var(--red); }
 .hist-meta  { font-size: .73rem; color: var(--text2); }
 .hist-items { font-size: .72rem; color: var(--text2); margin-top: 3px; font-style: italic; }
+.hist-note {
+  font-size: .72rem;
+  color: var(--blue);
+  background: var(--blue-bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  border-left: 2px solid var(--blue);
+}
 
 /* CHART */
 .period-row { display: flex; gap: 6px; margin-bottom: 14px; }
@@ -658,24 +670,6 @@ header {
   transform: scale(.97);
 }
 
-/* CASH DISPLAY */
-.cash-display {
-  font-size: 1.1rem;
-  font-weight: 700;
-  text-align: center;
-  background: var(--blue-bg);
-  border-color: var(--blue);
-  color: var(--blue);
-  margin-bottom: 8px;
-}
-.cash-add-row {
-  display: flex;
-  gap: 8px;
-}
-.cash-add-row .field {
-  margin-bottom: 0;
-}
-
 /* Izoh maydoni uslubi */
 textarea.field {
   resize: vertical;
@@ -683,16 +677,8 @@ textarea.field {
   line-height: 1.5;
 }
 
-/* Tarixda izoh ko'rinishi */
-.hist-note {
-  font-size: .72rem;
-  color: var(--blue);
-  background: var(--blue-bg);
-  padding: 4px 8px;
-  border-radius: 6px;
-  margin-top: 6px;
-  border-left: 2px solid var(--blue);
-}
+body.dark .toast { background: #f1f5f9; color: #111827; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* Tugma uslubi */
 .input-row .add-btn {
@@ -703,6 +689,3 @@ textarea.field {
   font-weight: 600;
   font-size: 0.9rem;
 }
-
-body.dark .toast { background: #f1f5f9; color: #111827; }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
