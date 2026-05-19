@@ -11,7 +11,7 @@ window.addEventListener("load", () => {
   setTimeout(() => {
     splash.style.opacity = "0";
     setTimeout(() => splash.remove(), 600);
-  }, 1500); // 1.5 секунддан кейин йўқолади
+  }, 1500);
 });
 
 
@@ -28,7 +28,10 @@ function setCashBalance(amount) {
 function addToCashBalance() {
   const inp = document.getElementById("addCashBalance");
   const val = +inp.value;
-  if (!val || val <= 0) { showToast("⚠️ Миқдорни киритинг"); return; }
+  if (!val || val <= 0) { 
+    showToast("⚠️ Миқдорни киритинг"); 
+    return; 
+  }
   const newBalance = getCashBalance() + val;
   setCashBalance(newBalance);
   inp.value = "";
@@ -38,11 +41,21 @@ function addToCashBalance() {
 
 /* ── STATE ── */
 let cashItems = [];
-let debtItems = [];
 let period    = "week";
 let barInst   = null;
 let pieInst   = null;
 let selectedMarket = "";
+
+/* ── Yangi: Izoh maydoni uchun ── */
+function getNote() {
+  const noteField = document.getElementById("noteField");
+  return noteField ? noteField.value.trim() : "";
+}
+
+function clearNote() {
+  const noteField = document.getElementById("noteField");
+  if (noteField) noteField.value = "";
+}
 
 /* ── FORMAT ── */
 const fmt    = n => Math.round(n).toLocaleString("ru-RU");
@@ -93,7 +106,9 @@ function goTab(name) {
   document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
   document.getElementById("ni-" + name).classList.add("active");
-  if (name === "debt")    renderAllDebts();
+  if (name === "debt") {
+    renderAllDebts();
+  }
   if (name === "history") renderHistory();
   if (name === "chart")   updateCharts();
 }
@@ -180,12 +195,10 @@ function addDebt() {
     id: Date.now() + Math.random()
   };
   
-  // Барча қарзларга қўшамиз
   const allDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
   allDebts.push(newDebt);
   localStorage.setItem("bz_debts", JSON.stringify(allDebts));
   
-  // Formani tozalash
   inp.value = "";
   document.getElementById("debtWho").value = "";
   document.getElementById("debtDate").value = today();
@@ -194,105 +207,6 @@ function addDebt() {
   renderAllDebts();
   
   showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
-}
-
-function delDebt(i) {
-  debtItems.splice(i,1);
-  renderDebt();
-  updateStats();
-}
-function editDebt(i) {
-  const it = debtItems[i];
-  document.getElementById("debtInp").value = it.kg
-    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
-  document.getElementById("debtDate").value = it.date || today();
-  document.getElementById("debtWho").value  = it.who  || "";
-  delDebt(i);
-  document.getElementById("debtInp").focus();
-}
-function renderDebt() {
-  const list = document.getElementById("debtList");
-  const cnt  = debtItems.length;
-  document.getElementById("debt-count").textContent = cnt;
-  if (!cnt) { 
-    list.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span>Ҳали қарз товар йўқ</div>`; 
-    document.getElementById("debtSub").style.display="none"; 
-    document.getElementById("debtSelectActions").style.display = "none";
-    return; 
-  }
-  list.innerHTML = debtItems.map((it,i) => `
-    <div class="item-row debt-row">
-      <input type="checkbox" class="debt-checkbox" data-index="${i}" onchange="updateDebtSelectAll()">
-      <div class="item-body">
-        <div class="item-name">${esc(it.name)}${it.kg?` <span style="font-weight:400;color:var(--text2);font-size:.78rem">${it.kg}кг</span>`:""}</div>
-        <div class="item-sub">📅 ${fmtD(it.date)}${it.who?" · 👤 "+esc(it.who):""}</div>
-      </div>
-      <span class="item-price dp">${fmt(it.totalPrice)}</span>
-      <div class="row-btns">
-        <button class="row-btn edit" onclick="editDebt(${i})">✏️</button>
-        <button class="row-btn" onclick="delDebt(${i})">✕</button>
-      </div>
-    </div>`).join("");
-  const total = debtItems.reduce((s,it)=>s+it.totalPrice,0);
-  document.getElementById("debtSub").style.display = "block";
-  document.getElementById("debtSubVal").textContent = fmt(total);
-  document.getElementById("debtSelectActions").style.display = "flex";
-  updateDebtSelectAll();
-}
-
-/* ── DEBT SELECTION FUNCTIONS (жорий қарзлар) ── */
-function getSelectedDebtIndexes() {
-  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
-  const selected = [];
-  checkboxes.forEach(cb => {
-    if (cb.checked) {
-      selected.push(parseInt(cb.dataset.index));
-    }
-  });
-  return selected;
-}
-
-function deleteSelectedDebts() {
-  const selected = getSelectedDebtIndexes();
-  if (selected.length === 0) {
-    showToast("⚠️ Ҳеч қандай қарз танланмаган");
-    return;
-  }
-  if (!confirm(`${selected.length} та қарзни ўчиришни хохлайсизми?`)) return;
-  
-  selected.sort((a,b) => b - a);
-  selected.forEach(idx => {
-    debtItems.splice(idx, 1);
-  });
-  renderDebt();
-  updateStats();
-  showToast(`✅ ${selected.length} та қарз ўчирилди`);
-}
-
-function selectAllDebts() {
-  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
-  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-  checkboxes.forEach(cb => {
-    cb.checked = !allChecked;
-  });
-  updateDebtSelectAll();
-}
-
-function updateDebtSelectAll() {
-  const checkboxes = document.querySelectorAll("#debtList .debt-checkbox");
-  const selectAllBtn = document.getElementById("debtSelectAllBtn");
-  if (!selectAllBtn) return;
-  const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
-  const someChecked = Array.from(checkboxes).some(cb => cb.checked);
-  if (checkboxes.length === 0) {
-    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
-  } else if (allChecked) {
-    selectAllBtn.textContent = "✓ Ҳаммасини бекор қилиш";
-  } else if (someChecked) {
-    selectAllBtn.textContent = "☑ Қисман танланган";
-  } else {
-    selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
-  }
 }
 
 /* ── ALL DEBTS (БАРЧА ҚАРЗЛАР) ── */
@@ -356,7 +270,6 @@ function editAllDebt(idx) {
     ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
   document.getElementById("debtDate").value = it.date || today();
   document.getElementById("debtWho").value  = it.who  || "";
-  // Eski qarzni o'chirib, yangisini qo'shish uchun
   deleteAllDebt(idx);
   document.getElementById("debtInp").focus();
   showToast("✏️ Қарзни таҳрирлаб, 'Қўшиш' тугмасини босинг");
@@ -424,37 +337,40 @@ function clearAllDebts() {
   showToast("✅ Барча қарзлар тозаланди");
 }
 
-/* ── STATS ── (qarz ko'rsatilmaydi) */
+/* ── STATS ── */
 function updateStats() {
   const cashBalance = getCashBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
   const spent = cashTotal;
   const balance = cashBalance - spent;
 
-  document.getElementById("income").value = cashBalance;
-
-  if (cashItems.length || cashBalance > 0) {
-    document.getElementById("statsRow").style.display  = "grid";
-    document.getElementById("progTrack").style.display = "block";
-    document.getElementById("sc-kassa").textContent  = fmt(cashBalance) + " сўм";
-    document.getElementById("sc-cash").textContent   = fmt(cashTotal) + " сўм";
-    document.getElementById("sc-debt").textContent   = "0 сўм";
-    document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
-    const chip = document.getElementById("sc-remain-chip");
-    chip.className = "stat-chip " + (balance < 0 ? "red" : balance < cashBalance * 0.2 ? "orange" : "green");
-    const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
-    document.getElementById("progFill").style.width      = pct + "%";
-    document.getElementById("progFill").style.background = pct > 80 ? "var(--red)" : pct > 50 ? "var(--orange)" : "var(--blue)";
-  } else {
-    document.getElementById("statsRow").style.display  = "none";
-    document.getElementById("progTrack").style.display = "none";
+  document.getElementById("income").value = fmt(cashBalance) + " сўм";
+  
+  document.getElementById("sc-kassa").textContent = fmt(cashBalance) + " сўм";
+  document.getElementById("sc-cash").textContent = fmt(cashTotal) + " сўм";
+  document.getElementById("sc-debt").textContent = "0 сўм";
+  document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
+  
+  const chip = document.getElementById("sc-remain-chip");
+  chip.className = "stat-chip " + (balance < 0 ? "red" : balance < cashBalance * 0.2 ? "orange" : "green");
+  
+  const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
+  const progFill = document.getElementById("progFill");
+  if (progFill) {
+    progFill.style.width = pct + "%";
+    progFill.style.background = pct > 80 ? "var(--red)" : pct > 50 ? "var(--orange)" : "var(--blue)";
   }
+  
+  const statsRow = document.getElementById("statsRow");
+  const progTrack = document.getElementById("progTrack");
+  if (statsRow) statsRow.style.display = "grid";
+  if (progTrack) progTrack.style.display = "block";
 }
 
 /* ── FINISH ── */
 function finish() {
   if (!cashItems.length) { 
-    showToast("⚠️ Товарлар йўқ!"); 
+    showToast("⚠️ Нақд товарлар йўқ!"); 
     return; 
   }
   if (!selectedMarket) { 
@@ -465,36 +381,54 @@ function finish() {
   const market = getMarket();
   const cashBalance = getCashBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const debtTotal = 0; // Joriy qarzlar yo'q (addDebt da qo'shilmaydi)
-  const spent = cashTotal;
-  const balance = cashBalance - spent;
+  const balance = cashBalance - cashTotal;
   const now = new Date();
-  const dateStr = now.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
-  const timeStr = now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  const dateStr = now.toLocaleDateString("ru-RU", {day: "2-digit", month: "2-digit", year: "numeric"});
+  const timeStr = now.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   const note = getNote();
 
-  let r = `Расход · ${dateStr}\n📍 Бозор: ${market}\n💵 Касса: ${fmt(cashBalance)} сўм\n\n`;
-  if (cashItems.length) {
-    cashItems.forEach(it => { r += `• ${it.name}`; if(it.kg) r+=` ${it.kg}кг (${fmt(it.unitPrice)})`; r+=` — ${fmt(it.totalPrice)} сўм\n`; });
-    r += "\n";
+  let r = `Расход · ${dateStr}\n`;
+  r += `📍 Бозор: ${market}\n`;
+  r += `💵 Касса: ${fmt(cashBalance)} сўм\n`;
+  r += `──────────────────\n`;
+  r += `💰 Нақд товарлар:\n`;
+  
+  cashItems.forEach(it => { 
+    r += `• ${it.name}`; 
+    if (it.kg) r += ` ${it.kg}кг`; 
+    if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
+    r += ` — ${fmt(it.totalPrice)} сўм\n`; 
+  });
+  
+  r += `──────────────────\n`;
+  if (note) {
+    r += `📝 Изоҳ: ${note}\n`;
+    r += `──────────────────\n`;
   }
-  r += `\n📊 Обший: ${fmt(cashTotal)} сўм`;
-  r += `\n✅ Колди: ${fmt(balance)} сўм`;
+  r += `💰 Харажат: ${fmt(cashTotal)} сўм\n`;
+  r += `✅ Қолдиқ: ${fmt(balance)} сўм`;
 
-  saveHistory({ market, cashBalance, cashTotal, spent, balance, cashItems:[...cashItems], date:today(), time:timeStr, note: note });
+  saveHistory({ 
+    market, cashBalance, cashTotal, spent: cashTotal, balance, 
+    cashItems: [...cashItems], date: today(), time: timeStr, note 
+  });
 
   setCashBalance(balance);
 
   const pre = document.getElementById("report");
-  pre.textContent = r;
-  pre.style.display = "block";
-  pre.scrollIntoView({ behavior:"smooth", block:"nearest" });
+  if (pre) {
+    pre.textContent = r;
+    pre.style.display = "block";
+    pre.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  
   sendTG(r);
 
   cashItems = [];
   renderCash();
   updateStats();
   clearNote();
+  
   showToast("✅ Тугатилди!");
 }
 
@@ -555,7 +489,8 @@ function renderHistory() {
       <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм харажат</span></div>
       ${es.map(e=>`<div class="hist-entry">
         <div class="hist-top"><span class="hist-mkt">📍 ${esc(e.market)}</span><span class="hist-rem ${(e.balance??e.remain??0)<0?'neg':''}">Қолдиқ: ${fmt(e.balance??e.remain??0)} сўм</span></div>
-        <div class="hist-meta">💵 Касса: ${fmt(e.cashBalance??e.kassa??0)} · 💰 Харажат: ${fmt(e.spent??e.cashTotal??0)} сўм${e.debtTotal?` · 📋 Қарз: ${fmt(e.debtTotal)} сўм`:""} · 🕐 ${e.time||""}</div>
+        <div class="hist-meta">💵 Касса: ${fmt(e.cashBalance??e.kassa??0)} · 💰 Харажат: ${fmt(e.spent??e.cashTotal??0)} сўм · 🕐 ${e.time||""}</div>
+        ${e.note?`<div class="hist-note">📝 ${esc(e.note)}</div>`:""}
         ${e.cashItems&&e.cashItems.length?`<div class="hist-items">${e.cashItems.slice(0,3).map(i=>esc(i.name)).join(", ")}${e.cashItems.length>3?"…":""}</div>`:""}
       </div>`).join("")}
     </div>`;
@@ -565,18 +500,7 @@ function clearHistory() {
   if(!confirm("Барча тарих ўчирилсинми?")) return;
   localStorage.removeItem("bz_history"); renderHistory();
 }
-/* ── TABS ── */
-function goTab(name) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
-  document.getElementById("ni-" + name).classList.add("active");
-  if (name === "debt") {
-    renderAllDebts();
-  }
-  if (name === "history") renderHistory();
-  if (name === "chart")   updateCharts();
-}
+
 /* ── CHARTS ── */
 function setPeriod(p) {
   period = p;
@@ -643,17 +567,18 @@ function showToast(msg) {
 
 /* ── INIT ── */
 document.addEventListener("DOMContentLoaded", ()=>{
-  initDark(); updateTgPill();
+  initDark(); 
+  updateTgPill();
   document.getElementById("debtDate").value = today();
   document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
-  renderCash(); renderDebt();
+  renderCash(); 
   loadAllDebts();
   renderAllDebts();
   
   const cashBalance = getCashBalance();
-  document.getElementById("income").value = cashBalance;
+  document.getElementById("income").value = fmt(cashBalance) + " сўм";
   document.getElementById("income").readOnly = true;
-  document.getElementById("income").style.background = "var(--bg)";
+  
   updateStats();
   
   const firstMarketBtn = document.querySelector(".market-btn");
@@ -663,4 +588,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
   }
 });
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("./sw.js").catch(()=>{});
+}
