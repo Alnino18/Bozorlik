@@ -390,7 +390,7 @@ function finish() {
   let r = `Расход · ${dateStr}\n`;
   r += `📍 Бозор: ${market}\n`;
   r += `💵 Касса: ${fmt(cashBalance)} сўм\n`;
-  r += `──────────────────\n`;
+  r += `\n`;
   r += `💰 Нақд товарлар:\n`;
   
   cashItems.forEach(it => { 
@@ -400,13 +400,13 @@ function finish() {
     r += ` — ${fmt(it.totalPrice)} сўм\n`; 
   });
   
-  r += `──────────────────\n`;
+  r += `\n`;
   if (note) {
     r += `📝 Изоҳ: ${note}\n`;
-    r += `──────────────────\n`;
+    r += `\n`;
   }
-  r += `💰 Харажат: ${fmt(cashTotal)} сўм\n`;
-  r += `✅ Қолдиқ: ${fmt(balance)} сўм`;
+  r += `💰 Общий: ${fmt(cashTotal)} сўм\n`;
+  r += `✅ Қолди: ${fmt(balance)} сўм`;
 
   saveHistory({ 
     market, cashBalance, cashTotal, spent: cashTotal, balance, 
