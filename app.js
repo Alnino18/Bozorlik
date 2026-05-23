@@ -6,6 +6,91 @@ function getTG() {
   };
 }
 
+/* ── GOOGLE SHEETS CONFIG ── */
+function getGS() {
+  return {
+    url: localStorage.getItem("bz_gs_url") || ""
+  };
+}
+
+function saveGS(url) {
+  localStorage.setItem("bz_gs_url", url);
+}
+
+/* Google Sheets га маълумот юбориш */
+async function sendToGoogleSheets(data) {
+  const cfg = getGS();
+  if (!cfg.url) return;
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(data));
+    const url = cfg.url + "?data=" + encoded;
+    const res = await fetch(url, { method: "GET", mode: "no-cors" });
+    showToast("📊 Google Sheets га сақланди!");
+  } catch (e) {
+    showToast("⚠️ Google Sheets хатолик");
+  }
+}
+
+/* Қарзни Google Sheets га юбориш */
+async function sendDebtToGoogleSheets(debt) {
+  const cfg = getGS();
+  if (!cfg.url) return;
+  try {
+    const data = {
+      type: "debt",
+      date: debt.date,
+      who: debt.who || "",
+      market: debt.market || "",
+      name: debt.name,
+      kg: debt.kg || "",
+      unitPrice: debt.unitPrice || "",
+      totalPrice: debt.totalPrice,
+      savedAt: debt.savedAt
+    };
+    const encoded = encodeURIComponent(JSON.stringify(data));
+    await fetch(cfg.url + "?data=" + encoded, { method: "GET", mode: "no-cors" });
+  } catch (e) {
+    // silent
+  }
+}
+
+function updateGsPill() {
+  const cfg = getGS();
+  const pill = document.getElementById("gs-pill");
+  if (!pill) return;
+  if (cfg.url) {
+    pill.textContent = "📊 GS ✓";
+    pill.classList.add("connected");
+  } else {
+    pill.textContent = "📊 GS";
+    pill.classList.remove("connected");
+  }
+}
+
+function openGsModal() {
+  const cfg = getGS();
+  document.getElementById("gsUrl").value = cfg.url;
+  document.getElementById("gsModal").classList.add("open");
+}
+
+function closeGsModal(e) {
+  if (!e || e.target === document.getElementById("gsModal"))
+    document.getElementById("gsModal").classList.remove("open");
+}
+
+function saveGs() {
+  const url = document.getElementById("gsUrl").value.trim();
+  if (!url) { showToast("⚠️ Web App URL киритинг"); return; }
+  if (!url.startsWith("https://script.google.com")) {
+    showToast("⚠️ Google Apps Script URL бўлиши керак");
+    return;
+  }
+  saveGS(url);
+  updateGsPill();
+  closeGsModal();
+  showToast("✅ Google Sheets улашди!");
+}
+
 window.addEventListener("load", () => {
   const splash = document.getElementById("splash");
   setTimeout(() => {
@@ -110,7 +195,7 @@ function goTab(name) {
     renderAllDebts();
   }
   if (name === "history") renderHistory();
-  if (name === "chart")   updateCharts();
+  if (name === "chart")   { updateCharts(); renderPriceHistory(); renderTopExpenses(); }
 }
 
 /* ── PARSE ── */
@@ -207,6 +292,7 @@ function addDebt() {
   renderAllDebts();
   
   showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
+  sendDebtToGoogleSheets(newDebt);
 }
 
 /* ── ALL DEBTS (БАРЧА ҚАРЗЛАР) ── */
@@ -387,7 +473,7 @@ function finish() {
   const timeStr = now.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   const note = getNote();
 
-  let r = `Расход · ${dateStr}\n`;
+  let r = `  Расход · ${dateStr}\n`;
   r += `📍 Бозор: ${market}\n`;
   r += `💵 Касса: ${fmt(cashBalance)} сўм\n`;
   r += `\n`;
@@ -412,6 +498,25 @@ function finish() {
     market, cashBalance, cashTotal, spent: cashTotal, balance, 
     cashItems: [...cashItems], date: today(), time: timeStr, note 
   });
+
+  /* Google Sheets га юбориш */
+  const gsData = {
+    type: "purchase",
+    date: today(),
+    time: timeStr,
+    market,
+    cashBalance,
+    cashTotal,
+    balance,
+    note,
+    items: cashItems.map(it => ({
+      name: it.name,
+      kg: it.kg || "",
+      unitPrice: it.unitPrice || "",
+      totalPrice: it.totalPrice
+    }))
+  };
+  sendToGoogleSheets(gsData);
 
   setCashBalance(balance);
 
@@ -565,13 +670,368 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove("show"), 2500);
 }
 
-/* ── INIT ── */
-document.addEventListener("DOMContentLoaded", ()=>{
+/* ══════════════════════════════════════════
+   📌 ШАБЛОНЛАР — тез-тез харид товарлар
+══════════════════════════════════════════ */
+function getTemplates() {
+  return JSON.parse(localStorage.getItem("bz_templates") || "[]");
+}
+function saveTemplates(arr) {
+  localStorage.setItem("bz_templates", JSON.stringify(arr));
+}
+function addTemplate() {
+  const val = document.getElementById("cashInp").value.trim();
+  if (!val) { showToast("⚠️ Аввал товар номини киритинг"); return; }
+  const p = parse(val);
+  if (!p) { showToast("⚠️ Формат тўғри эмас"); return; }
+  const templates = getTemplates();
+  if (templates.find(t => t.name === p.name)) { showToast("⚠️ Бу шаблон аллақачон бор"); return; }
+  templates.push({ name: p.name, kg: p.kg, unitPrice: p.unitPrice, totalPrice: p.totalPrice, raw: val });
+  saveTemplates(templates);
+  renderTemplates();
+  showToast("📌 Шаблон сақланди: " + p.name);
+}
+function useTemplate(raw) {
+  document.getElementById("cashInp").value = raw;
+  document.getElementById("cashInp").focus();
+  showToast("✏️ Нархни янгилаб + босинг");
+}
+function deleteTemplate(i) {
+  const templates = getTemplates();
+  templates.splice(i, 1);
+  saveTemplates(templates);
+  renderTemplates();
+}
+function renderTemplates() {
+  const templates = getTemplates();
+  const cont = document.getElementById("templateList");
+  if (!cont) return;
+  if (!templates.length) {
+    cont.innerHTML = `<div style="color:var(--text2);font-size:.8rem;padding:8px 0">Ҳали шаблон йўқ. Товар киритиб 📌 босинг</div>`;
+    return;
+  }
+  cont.innerHTML = templates.map((t, i) => `
+    <div class="template-item" onclick="useTemplate('${t.raw.replace(/'/g,"\\'")}')">
+      <span class="tmpl-name">${esc(t.name)}${t.kg ? ` ${t.kg}кг` : ""}</span>
+      <span class="tmpl-price">${fmt(t.totalPrice)} сўм</span>
+      <button class="row-btn" onclick="event.stopPropagation();deleteTemplate(${i})" style="margin-left:6px">✕</button>
+    </div>`).join("");
+}
+
+/* ══════════════════════════════════════════
+   📈 ТОВАР НАРХ ТАРИХИ
+══════════════════════════════════════════ */
+let priceChartInst = null;
+
+function buildPriceHistory() {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const map = {}; // { "Мош": [{date, price}] }
+  h.forEach(entry => {
+    if (!entry.cashItems) return;
+    entry.cashItems.forEach(it => {
+      const key = it.name.trim();
+      if (!map[key]) map[key] = [];
+      map[key].push({ date: entry.date, price: it.unitPrice || it.totalPrice });
+    });
+  });
+  return map;
+}
+
+function renderPriceHistory() {
+  const sel = document.getElementById("priceItemSel");
+  const map = buildPriceHistory();
+  const keys = Object.keys(map).sort();
+  if (!keys.length) { 
+    sel.innerHTML = `<option>Тарих йўқ</option>`; 
+    return; 
+  }
+  sel.innerHTML = keys.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join("");
+  drawPriceChart(keys[0], map);
+}
+
+function onPriceItemChange() {
+  const sel = document.getElementById("priceItemSel");
+  const map = buildPriceHistory();
+  drawPriceChart(sel.value, map);
+}
+
+function drawPriceChart(name, map) {
+  const data = (map[name] || []).sort((a, b) => a.date.localeCompare(b.date));
+  const isDark = document.body.classList.contains("dark");
+  const tc = isDark ? "#94a3b8" : "#6b7280";
+  const gc = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+
+  const infoEl = document.getElementById("priceChangeInfo");
+  if (data.length >= 2) {
+    const first = data[0].price, last = data[data.length-1].price;
+    const diff = last - first;
+    const pct = first > 0 ? ((diff / first) * 100).toFixed(1) : 0;
+    const arrow = diff > 0 ? "📈" : diff < 0 ? "📉" : "➡️";
+    const color = diff > 0 ? "var(--red)" : diff < 0 ? "var(--green)" : "var(--text2)";
+    infoEl.innerHTML = `<span style="color:${color}">${arrow} ${diff > 0 ? "+" : ""}${fmt(diff)} сўм (${pct}%)</span> — ${fmtD(data[0].date)} дан ${fmtD(data[data.length-1].date)} гача`;
+  } else {
+    infoEl.innerHTML = data.length === 1 ? `Фақат 1 та маълумот` : `Маълумот йўқ`;
+  }
+
+  if (priceChartInst) priceChartInst.destroy();
+  priceChartInst = new Chart(document.getElementById("priceLineChart").getContext("2d"), {
+    type: "line",
+    data: {
+      labels: data.map(d => fmtD(d.date)),
+      datasets: [{ label: name, data: data.map(d => d.price),
+        borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.1)",
+        tension: 0.3, pointRadius: 5, fill: true }]
+    },
+    options: { responsive: true,
+      plugins: { legend: { labels: { color: tc } }, tooltip: { callbacks: { label: c => fmt(c.raw) + " сўм" } } },
+      scales: { x: { ticks: { color: tc }, grid: { color: gc } }, y: { ticks: { color: tc, callback: v => fmt(v) }, grid: { color: gc } } }
+    }
+  });
+}
+
+/* ══════════════════════════════════════════
+   🏆 ЭНГ КЎП ХАРАЖАТ (товар + бозор)
+══════════════════════════════════════════ */
+function renderTopExpenses() {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const itemMap = {}, mktMap = {};
+  h.forEach(entry => {
+    mktMap[entry.market] = (mktMap[entry.market] || 0) + (entry.spent || entry.cashTotal || 0);
+    if (entry.cashItems) {
+      entry.cashItems.forEach(it => {
+        itemMap[it.name] = (itemMap[it.name] || 0) + it.totalPrice;
+      });
+    }
+  });
+
+  const topItems = Object.entries(itemMap).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  const topMkts  = Object.entries(mktMap).sort((a,b) => b[1]-a[1]);
+  const maxItem  = topItems[0]?.[1] || 1;
+  const maxMkt   = topMkts[0]?.[1] || 1;
+
+  const itemEl = document.getElementById("topItemsList");
+  const mktEl  = document.getElementById("topMktsList");
+
+  if (!topItems.length) {
+    itemEl.innerHTML = `<div style="color:var(--text2);font-size:.85rem;padding:12px 0">Тарих йўқ</div>`;
+  } else {
+    itemEl.innerHTML = topItems.map(([name, sum], i) => `
+      <div class="top-row">
+        <span class="top-rank">${["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"][i]}</span>
+        <div style="flex:1">
+          <div class="top-name">${esc(name)}</div>
+          <div class="top-bar-wrap"><div class="top-bar" style="width:${(sum/maxItem*100).toFixed(1)}%"></div></div>
+        </div>
+        <span class="top-sum">${fmt(sum)} сўм</span>
+      </div>`).join("");
+  }
+
+  if (!topMkts.length) {
+    mktEl.innerHTML = `<div style="color:var(--text2);font-size:.85rem;padding:12px 0">Тарих йўқ</div>`;
+  } else {
+    mktEl.innerHTML = topMkts.map(([name, sum], i) => `
+      <div class="top-row">
+        <span class="top-rank">${["🥇","🥈","🥉","4️⃣","5️⃣"][i]||"·"}</span>
+        <div style="flex:1">
+          <div class="top-name">${esc(name)}</div>
+          <div class="top-bar-wrap"><div class="top-bar mkt-bar" style="width:${(sum/maxMkt*100).toFixed(1)}%"></div></div>
+        </div>
+        <span class="top-sum">${fmt(sum)} сўм</span>
+      </div>`).join("");
+  }
+}
+
+/* ══════════════════════════════════════════
+   📥 CSV ЭКСПОРТ
+══════════════════════════════════════════ */
+function exportCSV() {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+
+  let csv = "\uFEFF"; // BOM for Excel UTF-8
+  csv += "ЗАКУПКА ТАРИХИ\n";
+  csv += "Сана,Вақт,Бозор,Касса (сўм),Харажат (сўм),Қолдиқ (сўм),Товарлар,Изоҳ\n";
+  h.forEach(e => {
+    const items = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм").join(" | ");
+    csv += [e.date, e.time || "", e.market, e.cashBalance || 0, e.cashTotal || e.spent || 0, e.balance || 0, `"${items}"`, `"${(e.note||"").replace(/"/g,'""')}"`].join(",") + "\n";
+  });
+
+  csv += "\nҚАРЗЛАР\n";
+  csv += "Сана,Ким,Бозор,Товар,кг,Нарх,Жами (сўм)\n";
+  debts.forEach(d => {
+    csv += [d.date, d.who || "", d.market || "", d.name, d.kg || "", d.unitPrice || "", d.totalPrice].join(",") + "\n";
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `bozorlik_${date}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast("📥 CSV юклаб олинди!");
+}
+
+
+
+/* ══════════════════════════════════════════
+   💾 JSON EXPORT / IMPORT — Backup & Restore
+══════════════════════════════════════════ */
+
+/* Барча маълумотларни JSON га экспорт */
+function exportJSON() {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    history:   JSON.parse(localStorage.getItem("bz_history")   || "[]"),
+    debts:     JSON.parse(localStorage.getItem("bz_debts")     || "[]"),
+    templates: JSON.parse(localStorage.getItem("bz_templates") || "[]"),
+    cashBalance: getCashBalance(),
+    tgToken:   localStorage.getItem("bz_tg_token") || "",
+    tgChat:    localStorage.getItem("bz_tg_chat")  || "",
+    gsUrl:     localStorage.getItem("bz_gs_url")   || "",
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = `bozorlik_backup_${date}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast("💾 Backup юклаб олинди!");
+}
+
+/* JSON файлдан маълумотларни тиклаш */
+function importJSON() {
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = ".json";
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.version) throw new Error("Нотўғри файл формати");
+
+        const existing = {
+          history:   JSON.parse(localStorage.getItem("bz_history")   || "[]"),
+          debts:     JSON.parse(localStorage.getItem("bz_debts")     || "[]"),
+          templates: JSON.parse(localStorage.getItem("bz_templates") || "[]"),
+        };
+
+        // Тарихни бирлаштириш (дубликатсиз)
+        const mergedHistory = [...existing.history];
+        (data.history || []).forEach(newEntry => {
+          const dup = mergedHistory.find(e => e.date === newEntry.date && e.time === newEntry.time && e.market === newEntry.market);
+          if (!dup) mergedHistory.push(newEntry);
+        });
+
+        // Қарзларни бирлаштириш (id бўйича)
+        const mergedDebts = [...existing.debts];
+        (data.debts || []).forEach(newDebt => {
+          if (!mergedDebts.find(d => d.id === newDebt.id)) mergedDebts.push(newDebt);
+        });
+
+        // Шаблонларни бирлаштириш
+        const mergedTmpl = [...existing.templates];
+        (data.templates || []).forEach(t => {
+          if (!mergedTmpl.find(x => x.name === t.name)) mergedTmpl.push(t);
+        });
+
+        localStorage.setItem("bz_history",   JSON.stringify(mergedHistory));
+        localStorage.setItem("bz_debts",     JSON.stringify(mergedDebts));
+        localStorage.setItem("bz_templates", JSON.stringify(mergedTmpl));
+        if (data.cashBalance) setCashBalance(data.cashBalance);
+        if (data.tgToken) localStorage.setItem("bz_tg_token", data.tgToken);
+        if (data.tgChat)  localStorage.setItem("bz_tg_chat",  data.tgChat);
+        if (data.gsUrl)   localStorage.setItem("bz_gs_url",   data.gsUrl);
+
+        renderTemplates(); renderAllDebts(); loadAllDebts(); updateStats();
+        updateTgPill(); updateGsPill(); renderHistory();
+        showToast(`✅ Тикланди! Тарих: +${mergedHistory.length - existing.history.length} та, Қарз: +${mergedDebts.length - existing.debts.length} та`);
+      } catch(err) {
+        showToast("❌ Хатолик: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+/* ══════════════════════════════════════════
+   ☁️ АВТОМАТИК KUNLIK BACKUP → Google Sheets
+══════════════════════════════════════════ */
+
+async function autoBackupToSheets() {
+  const cfg = getGS();
+  if (!cfg.url) return;
+
+  const lastBackup = localStorage.getItem("bz_last_backup") || "";
+  const todayStr   = today();
+  if (lastBackup === todayStr) return; // бугун аллақачон backup қилинган
+
+  const history   = JSON.parse(localStorage.getItem("bz_history")   || "[]");
+  const debts     = JSON.parse(localStorage.getItem("bz_debts")     || "[]");
+
+  if (!history.length && !debts.length) return;
+
+  try {
+    const payload = {
+      type:        "full_backup",
+      backupDate:  todayStr,
+      cashBalance: getCashBalance(),
+      historyCount: history.length,
+      debtCount:   debts.length,
+      debtTotal:   debts.reduce((s, d) => s + d.totalPrice, 0),
+      // Охирги 30 та тарих юборамиз (katta payload bo'lmasin)
+      recentHistory: history.slice(0, 30),
+      debts: debts
+    };
+
+    const encoded = encodeURIComponent(JSON.stringify(payload));
+    await fetch(cfg.url + "?data=" + encoded, { method: "GET", mode: "no-cors" });
+
+    localStorage.setItem("bz_last_backup", todayStr);
+    showToast("☁️ Автоматик backup юборилди!");
+  } catch(e) {
+    // тин олиб backup қилмаслик учун уриниш кейинга қолдирилади
+  }
+}
+
+/* Backup статусини кўрсатиш */
+function getBackupStatus() {
+  const last = localStorage.getItem("bz_last_backup") || null;
+  const el = document.getElementById("backupStatusText");
+  if (!el) return;
+  if (!last) {
+    el.textContent = "Ҳали backup қилинмаган";
+    el.style.color = "var(--red)";
+  } else if (last === today()) {
+    el.textContent = "✅ Бугун backup қилинди (" + fmtD(last) + ")";
+    el.style.color = "var(--green)";
+  } else {
+    const diff = Math.round((new Date(today()) - new Date(last)) / 86400000);
+    el.textContent = `⚠️ ${diff} кун олdin (${fmtD(last)})`;
+    el.style.color = "var(--orange)";
+  }
+}
+
+async function manualBackup() {
+  const cfg = getGS();
+  if (!cfg.url) { showToast("⚠️ Аввал Google Sheets улаш керак (📊 GS тугмаси)"); return; }
+  // Кунлик лимитни олиб ташлаб мажбурий backup
+  localStorage.removeItem("bz_last_backup");
+  await autoBackupToSheets();
+  getBackupStatus();
+}
+
+
   initDark(); 
   updateTgPill();
+  updateGsPill();
   document.getElementById("debtDate").value = today();
   document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
   renderCash(); 
+  renderTemplates();
   loadAllDebts();
   renderAllDebts();
   
@@ -586,7 +1046,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     firstMarketBtn.classList.add("selected");
     selectedMarket = "Куйлик";
   }
-});
+
+  // Автоматик кунлик backup
+  setTimeout(() => {
+    autoBackupToSheets();
+    getBackupStatus();
+  }, 2000);
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
   navigator.serviceWorker.register("./sw.js").catch(()=>{});

@@ -25,6 +25,7 @@
   </div>
   <div class="h-actions">
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
+    <button class="h-btn tg-status" id="gs-pill" onclick="openGsModal()">📊 GS</button>
     <button class="h-btn tg-status" id="tg-pill" onclick="openTgModal()">✈️ TG</button>
   </div>
 </header>
@@ -126,8 +127,11 @@
       <div class="input-row">
         <input id="cashInp" class="field inp-flex" placeholder="Мош 10кг (15000) 150000"
                onkeydown="if(event.key==='Enter')addCash()"/>
+        <button class="add-btn" onclick="addTemplate()" style="background:var(--orange)" title="Шаблонга сақлаш">📌</button>
         <button class="add-btn green-btn" onclick="addCash()">+</button>
       </div>
+      <!-- Шаблонлар -->
+      <div id="templateList" style="margin-top:8px"></div>
       <div id="cashList" class="item-list"></div>
       <div class="subtotal cash-subtotal" id="cashSub" style="display:none">
         Жами нақд: <b id="cashSubVal">0</b> сўм
@@ -212,10 +216,139 @@
       <p class="card-title">📊 Бозор бўйича</p>
       <div class="chart-box"><canvas id="pieChart"></canvas></div>
     </div>
+
+    <!-- ТОВАР НАРХ ТАРИХИ -->
+    <div class="card">
+      <p class="card-title">📈 Товар нарх тарихи</p>
+      <select id="priceItemSel" class="field" onchange="onPriceItemChange()" style="margin-bottom:10px"></select>
+      <div id="priceChangeInfo" style="font-size:.85rem;color:var(--text2);margin-bottom:10px;padding:8px;background:var(--bg);border-radius:8px"></div>
+      <div class="chart-box"><canvas id="priceLineChart"></canvas></div>
+    </div>
+
+    <!-- ЭНГ КЎП ХАРАЖАТ -->
+    <div class="card">
+      <p class="card-title">🏆 Энг кўп харажат — Товарлар</p>
+      <div id="topItemsList"></div>
+    </div>
+    <div class="card">
+      <p class="card-title">🏆 Энг кўп харажат — Бозорлар</p>
+      <div id="topMktsList"></div>
+    </div>
+
+    <!-- BACKUP / RESTORE -->
+    <div class="card">
+      <p class="card-title">💾 Backup — маълумотларни сақлаш</p>
+      <div class="backup-status-row">
+        <span style="font-size:.8rem;color:var(--text2)">Охирги backup:</span>
+        <span id="backupStatusText" style="font-size:.8rem;font-weight:600">—</span>
+      </div>
+      <div class="backup-btn-grid">
+        <button class="backup-btn export-btn" onclick="exportJSON()">
+          <span style="font-size:1.4rem">💾</span>
+          <span class="backup-btn-label">JSON Backup</span>
+          <span class="backup-btn-sub">Файлга сақлаш</span>
+        </button>
+        <button class="backup-btn import-btn" onclick="importJSON()">
+          <span style="font-size:1.4rem">📂</span>
+          <span class="backup-btn-label">Тиклаш</span>
+          <span class="backup-btn-sub">JSON дан юклаш</span>
+        </button>
+        <button class="backup-btn cloud-btn" onclick="manualBackup()">
+          <span style="font-size:1.4rem">☁️</span>
+          <span class="backup-btn-label">Sheets Backup</span>
+          <span class="backup-btn-sub">Ҳозир юбориш</span>
+        </button>
+      </div>
+      <p style="font-size:.75rem;color:var(--text2);margin-top:10px;line-height:1.5">
+        💡 <b>JSON Backup</b> — Chrome кеши тозаланса ҳам тикланади.<br/>
+        ☁️ <b>Sheets Backup</b> — ҳар куни автоматик юборилади (GS улашилса).
+      </p>
+    </div>
+
+    <!-- CSV ЭКСПОРТ -->
+    <div class="card" style="text-align:center">
+      <p class="card-title">📥 CSV Экспорт (Excel учун)</p>
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">Барча тарих ва қарзларни Excel да очиладиган форматда юклаш</p>
+      <button class="finish-btn" onclick="exportCSV()" style="margin:0 auto;max-width:280px">📥 CSV юклаб олиш</button>
+    </div>
+
     <div style="height:80px"></div>
   </div>
 
 </main>
+
+<!-- GS MODAL -->
+<div class="modal-bg" id="gsModal" onclick="closeGsModal(event)">
+  <div class="modal-box">
+    <p class="modal-title">📊 Google Sheets улаш</p>
+    <p class="modal-hint">
+      1. <b>script.google.com</b> → Янги лойиҳа яратинг<br/>
+      2. Қуйидаги кодни жойлаштириб сақланг<br/>
+      3. <b>Deploy → New deployment → Web App</b><br/>
+      &nbsp;&nbsp;&nbsp;Execute as: <b>Me</b> · Access: <b>Anyone</b><br/>
+      4. URL нусха олиб пастга жойлаштиринг
+    </p>
+    <div style="background:var(--bg);border-radius:10px;padding:10px;margin:8px 0;font-size:.72rem;font-family:monospace;overflow-x:auto;white-space:pre;line-height:1.6;color:var(--text2);max-height:200px;overflow-y:auto">function doGet(e) {
+  try {
+    var raw = e.parameter.data;
+    var data = JSON.parse(decodeURIComponent(raw));
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    if (data.type === "purchase") {
+      var sh = ss.getSheetByName("Закупка")
+             || ss.insertSheet("Закупка");
+      if (sh.getLastRow() === 0)
+        sh.appendRow(["Сана","Вақт","Бозор",
+          "Касса","Харажат","Қолдиқ","Товарлар","Изоҳ"]);
+      sh.appendRow([data.date, data.time, data.market,
+        data.cashBalance, data.cashTotal, data.balance,
+        data.items.map(function(i){
+          return i.name+(i.kg?" "+i.kg+"кг":"")+" - "+i.totalPrice+" сўм";
+        }).join("; "), data.note || ""]);
+    }
+
+    if (data.type === "debt") {
+      var sh2 = ss.getSheetByName("Қарзлар")
+              || ss.insertSheet("Қарзлар");
+      if (sh2.getLastRow() === 0)
+        sh2.appendRow(["Сана","Ким","Бозор",
+          "Товар","кг","Нарх","Жами","Сана2"]);
+      sh2.appendRow([data.date, data.who, data.market,
+        data.name, data.kg, data.unitPrice,
+        data.totalPrice, data.savedAt]);
+    }
+
+    if (data.type === "full_backup") {
+      var shb = ss.getSheetByName("Backup")
+              || ss.insertSheet("Backup");
+      if (shb.getLastRow() === 0)
+        shb.appendRow(["Backup Сана","Касса","Тарих сони",
+          "Қарз сони","Жами қарз","Қарзлар"]);
+      var debtNames = (data.debts||[]).map(function(d){
+        return d.name+" "+d.totalPrice+" сўм"+(d.who?" ("+d.who+")":"");
+      }).join("; ");
+      shb.appendRow([data.backupDate, data.cashBalance,
+        data.historyCount, data.debtCount,
+        data.debtTotal, debtNames]);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:true}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:false,error:err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</div>
+    <label class="field-label">Web App URL</label>
+    <input type="text" id="gsUrl" class="field" placeholder="https://script.google.com/macros/s/..."/>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeGsModal()">Бекор</button>
+      <button class="modal-save" onclick="saveGs()">Улаш ✓</button>
+    </div>
+  </div>
+</div>
 
 <!-- TG MODAL -->
 <div class="modal-bg" id="tgModal" onclick="closeTgModal(event)">
