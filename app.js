@@ -186,16 +186,51 @@ function initDark() {
 }
 
 /* ── TABS ── */
+const TABS = ["main", "debt", "history", "chart"];
+
 function goTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
   document.getElementById("ni-" + name).classList.add("active");
-  if (name === "debt") {
-    renderAllDebts();
-  }
+  if (name === "debt")    renderAllDebts();
   if (name === "history") renderHistory();
   if (name === "chart")   { updateCharts(); renderPriceHistory(); renderTopExpenses(); }
+}
+
+function currentTabIndex() {
+  const active = document.querySelector(".tab.active");
+  if (!active) return 0;
+  const name = active.id.replace("tab-", "");
+  return TABS.indexOf(name);
+}
+
+function initSwipe() {
+  const el = document.querySelector(".main-scroll");
+  let startX = 0, startY = 0, moved = false;
+
+  el.addEventListener("touchstart", e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    moved  = false;
+  }, { passive: true });
+
+  el.addEventListener("touchmove", e => {
+    moved = true;
+  }, { passive: true });
+
+  el.addEventListener("touchend", e => {
+    if (!moved) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+
+    // Горизонтал свайп бўлиши учун: dx кўпроқ, минимум 60px
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+
+    const idx = currentTabIndex();
+    if (dx < 0 && idx < TABS.length - 1) goTab(TABS[idx + 1]); // чапга → кейинги
+    if (dx > 0 && idx > 0)               goTab(TABS[idx - 1]); // ўнгга → олдинги
+  }, { passive: true });
 }
 
 /* ── PARSE ── */
@@ -473,7 +508,7 @@ function finish() {
   const timeStr = now.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   const note = getNote();
 
-  let r = `  Расход · ${dateStr}\n`;
+  let r = `Расход · ${dateStr}\n`;
   r += `📍 Бозор: ${market}\n`;
   r += `💵 Касса: ${fmt(cashBalance)} сўм\n`;
   r += `\n`;
@@ -1047,11 +1082,15 @@ async function manualBackup() {
     selectedMarket = "Куйлик";
   }
 
+  // Свайп жести
+  initSwipe();
+
   // Автоматик кунлик backup
   setTimeout(() => {
     autoBackupToSheets();
     getBackupStatus();
   }, 2000);
+});
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
   navigator.serviceWorker.register("./sw.js").catch(()=>{});
