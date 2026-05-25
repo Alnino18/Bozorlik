@@ -1060,22 +1060,23 @@ async function manualBackup() {
 }
 
 
-  initDark(); 
+document.addEventListener("DOMContentLoaded", () => {
+  initDark();
   updateTgPill();
   updateGsPill();
   document.getElementById("debtDate").value = today();
   document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
-  renderCash(); 
+  renderCash();
   renderTemplates();
   loadAllDebts();
   renderAllDebts();
-  
+
   const cashBalance = getCashBalance();
   document.getElementById("income").value = fmt(cashBalance) + " сўм";
   document.getElementById("income").readOnly = true;
-  
+
   updateStats();
-  
+
   const firstMarketBtn = document.querySelector(".market-btn");
   if (firstMarketBtn) {
     firstMarketBtn.classList.add("selected");
