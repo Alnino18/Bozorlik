@@ -22,6 +22,7 @@
 <header style="height: 55px;">
   <div class="h-brand">
     <img src="icon-192.png" class="h-logo" alt=""/>
+    <span class="h-title"></span>
   </div>
   <div class="h-actions">
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
@@ -41,12 +42,12 @@
     <span class="nav-lbl">Қарзлар</span>
   </button>
   <button class="nav-item" id="ni-history" onclick="goTab('history')">
-    <span class="nav-icon">📅</span>
+    <span class="nav-icon">🕐</span>
     <span class="nav-lbl">Тарих</span>
   </button>
   <button class="nav-item" id="ni-chart" onclick="goTab('chart')">
     <span class="nav-icon">📊</span>
-    <span class="nav-lbl">Диаграмма</span>
+    <span class="nav-lbl">Таҳлил</span>
   </button>
 </nav>
 
@@ -54,6 +55,24 @@
 
   <!-- ═══ TAB: MAIN ═══ -->
   <div class="tab active" id="tab-main">
+
+    <!-- БОШ САҲИФА ВИДЖЕТИ -->
+    <div class="dashboard-widget" id="dashWidget">
+      <div class="dw-col">
+        <div class="dw-label">💵 Касса</div>
+        <div class="dw-val" id="dw-kassa">0 сўм</div>
+      </div>
+      <div class="dw-divider"></div>
+      <div class="dw-col">
+        <div class="dw-label">📅 Бугун</div>
+        <div class="dw-val" id="dw-today">0 сўм</div>
+      </div>
+      <div class="dw-divider"></div>
+      <div class="dw-col">
+        <div class="dw-label">🕐 Охирги</div>
+        <div class="dw-val dw-market" id="dw-last">—</div>
+      </div>
+    </div>
 
     <!-- бозор карточка -->
     <div class="card">
@@ -116,6 +135,16 @@
       <div class="prog-fill" id="progFill" style="width:0%"></div>
     </div>
 
+    <!-- ТЕЗ ҚЎШИШ (QUICK ADD) -->
+    <div class="quick-add-bar">
+      <button class="qa-mic-btn" id="micBtn" onclick="toggleVoice()" title="Овозли киритиш">🎤</button>
+      <input id="cashInp" class="field qa-inp" placeholder="Мош 10кг (15000) 150000"
+             onkeydown="if(event.key==='Enter')addCash()"/>
+      <button class="add-btn" onclick="addTemplate()" style="background:var(--orange)" title="Шаблонга сақлаш">📌</button>
+      <button class="add-btn green-btn" onclick="addCash()">+</button>
+    </div>
+    <div id="voiceStatus" style="display:none;font-size:.78rem;color:var(--blue);text-align:center;padding:4px 16px;animation:pulse 1s infinite">🎤 Гапиряпсиз...</div>
+
     <!-- нақд товар -->
     <div class="card">
       <div class="section-head">
@@ -124,14 +153,8 @@
         <span class="count-badge cash-badge" id="cash-count">0</span>
       </div>
       <p class="hint-text">Формат: <code>Мош 10кг (15000) 150000</code> ёки <code>Кийим 80000</code></p>
-      <div class="input-row">
-        <input id="cashInp" class="field inp-flex" placeholder="Мош 10кг (15000) 150000"
-               onkeydown="if(event.key==='Enter')addCash()"/>
-        <button class="add-btn" onclick="addTemplate()" style="background:var(--orange)" title="Шаблонга сақлаш">📌</button>
-        <button class="add-btn green-btn" onclick="addCash()">+</button>
-      </div>
       <!-- Шаблонлар -->
-      <div id="templateList" style="margin-top:8px"></div>
+      <div id="templateList" style="margin-top:4px"></div>
       <div id="cashList" class="item-list"></div>
       <div class="subtotal cash-subtotal" id="cashSub" style="display:none">
         Жами нақд: <b id="cashSubVal">0</b> сўм
@@ -146,10 +169,15 @@
       <textarea id="noteField" class="field" rows="3" placeholder="Изоҳ киритинг..."></textarea>
     </div>
     
-    <button class="finish-btn" onclick="finish()">✅ Тугатиш ва Телеграмга юбориш</button>
+    <div class="finish-row">
+      <button class="finish-btn" onclick="finish()">✅ Тугатиш ва TG юбориш</button>
+      <button class="receipt-btn" onclick="showReceipt()" id="receiptBtn" style="display:none">🧾 Чек</button>
+    </div>
     <pre id="report" class="report-box" style="display:none"></pre>
     <div style="height:80px"></div>
   </div>
+
+  
 
   <!-- ═══ TAB: DEBT ═══ -->
   <div class="tab" id="tab-debt">
@@ -190,14 +218,21 @@
 
   <!-- ═══ TAB: HISTORY ═══ -->
   <div class="tab" id="tab-history">
+
+    <div class="card" id="histStatsCard" style="display:none">
+      <p class="card-title">📊 Ой статистикаси</p>
+      <div class="stats-row" id="histStatsRow"></div>
+    </div>
+
     <div class="card">
-      <p class="card-title">📅 Тарих</p>
-      <div class="filter-row">
-        <input type="month" id="histMonth" class="field" onchange="renderHistory()"/>
+      <div class="filter-row" style="margin-bottom:8px">
+        <input type="month" id="histMonth" class="field" onchange="renderHistory()" style="margin-bottom:0"/>
         <button class="sm-danger-btn" onclick="clearHistory()">🗑</button>
       </div>
-      <div id="histList"></div>
+      <div id="histMarketFilter" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
+
+    <div id="histList"></div>
     <div style="height:80px"></div>
   </div>
 
@@ -215,6 +250,34 @@
     <div class="card">
       <p class="card-title">📊 Бозор бўйича</p>
       <div class="chart-box"><canvas id="pieChart"></canvas></div>
+    </div>
+
+    <!-- ОЙМА-ОЙ СОЛИШТИРИШ -->
+    <div class="card">
+      <p class="card-title">📊 Ойма-ой солиштириш</p>
+      <div id="monthCompareInfo" style="font-size:.85rem;padding:10px;background:var(--bg);border-radius:10px;margin-bottom:10px"></div>
+      <div class="chart-box"><canvas id="monthCompareChart"></canvas></div>
+    </div>
+
+    <!-- ҲАФТАЛИК ҲИСОБОТ -->
+    <div class="card">
+      <p class="card-title">📬 Автоматик ҳисобот</p>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px">Ҳафталик ёки ойлик статистика Телеграмга юборилади</p>
+      <div style="display:flex;gap:8px">
+        <button class="plan-act-btn primary-act" onclick="sendWeeklyReport()">📬 Ҳафталик ҳисобот</button>
+        <button class="plan-act-btn" onclick="sendMonthlyReport()">📅 Ойлик ҳисобот</button>
+      </div>
+    </div>
+
+    <!-- ЭСЛАТМА (НОТИФИКАЦИЯ) -->
+    <div class="card">
+      <p class="card-title">🔔 Кунлик эслатма <span id="notif-badge" style="font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:99px;color:#fff;margin-left:6px;background:var(--text2)">OFF</span></p>
+      <p id="notifStatus" style="font-size:.8rem;color:var(--text2);margin-bottom:10px">Эслатма ўчирилган</p>
+      <div class="notif-row">
+        <input type="time" id="notifTime" class="field" value="08:00" style="width:120px;margin-bottom:0;flex-shrink:0"/>
+        <button id="notifEnableBtn" class="plan-act-btn primary-act" onclick="enableNotifications()" style="flex:1">🔔 Ёқиш</button>
+        <button id="notifDisableBtn" class="plan-act-btn" onclick="disableNotifications()" style="flex:1;display:none">🔕 Ўчириш</button>
+      </div>
     </div>
 
     <!-- ТОВАР НАРХ ТАРИХИ -->
@@ -350,6 +413,17 @@
   </div>
 </div>
 
+<!-- RECEIPT MODAL -->
+<div class="modal-bg" id="receiptModal" onclick="closeReceiptModal(event)">
+  <div class="modal-box receipt-modal-box">
+    <div id="receiptContent" class="receipt-content"></div>
+    <div class="modal-btns" style="margin-top:12px">
+      <button class="modal-cancel" onclick="closeReceiptModal()">Ёпиш</button>
+      <button class="modal-save" onclick="shareReceipt()">✈️ TG га юбориш</button>
+    </div>
+  </div>
+</div>
+
 <!-- TG MODAL -->
 <div class="modal-bg" id="tgModal" onclick="closeTgModal(event)">
   <div class="modal-box">
@@ -369,6 +443,9 @@
     </div>
   </div>
 </div>
+
+<!-- CONFETTI -->
+<canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none"></canvas>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
