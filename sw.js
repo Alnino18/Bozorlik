@@ -1,4 +1,4 @@
-const CACHE = "bozorlik-v3";
+const CACHE = "bozorlik-v4";
 
 self.addEventListener("install", event => {
   self.skipWaiting();
@@ -6,8 +6,8 @@ self.addEventListener("install", event => {
     caches.open(CACHE).then(cache => {
       return cache.addAll([
         "./index.html",
-        "./style.css",
-        "./app.js",
+        "./style.css?v=3",
+        "./app.js?v=3",
         "./manifest.json",
         "./icon-192.png",
         "./icon-512.png",
@@ -20,10 +20,13 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE).map(k => {
+        console.log("Deleting cache:", k);
+        return caches.delete(k);
+      }))
     )
   );
-  self.clients.claim();
+  return self.clients.claim();
 });
 
 self.addEventListener("fetch", event => {

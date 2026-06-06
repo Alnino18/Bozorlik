@@ -577,7 +577,9 @@ function updateStats() {
   const cardBalance = getCardBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
   const cardTotal = cardItems.reduce((s,it) => s + it.totalPrice, 0);
-  const balance = cashBalance - cashTotal;
+  const cashRemain = cashBalance - cashTotal;
+  const cardRemain = cardBalance - cardTotal;
+  const totalRemain = cashRemain + cardRemain;
 
   document.getElementById("income").value = fmt(cashBalance) + " сўм";
   const cardIncEl = document.getElementById("cardIncome");
@@ -591,11 +593,11 @@ function updateStats() {
   if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
   const debtsTotal = JSON.parse(localStorage.getItem("bz_debts") || "[]").reduce((s,d) => s + d.totalPrice, 0);
   document.getElementById("sc-debt").textContent = fmt(debtsTotal) + " сўм";
-  const totalRemain = balance + (cardBalance - cardTotal);
   document.getElementById("sc-remain").textContent = fmt(totalRemain) + " сўм";
   
   const chip = document.getElementById("sc-remain-chip");
-  chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < (cashBalance + cardBalance) * 0.2 ? "orange" : "green");
+  const totalBal = cashBalance + cardBalance;
+  chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < totalBal * 0.2 ? "orange" : "green");
   
   const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
   const progFill = document.getElementById("progFill");
