@@ -831,14 +831,54 @@ function renderHistory() {
             <span style="color:var(--purple);font-weight:600">${fmt(i.totalPrice)} сўм</span>
           </div>`).join("");
         const tgReport = buildEntryReport(e);
+        const cashBal  = e.cashBalance ?? e.kassa ?? 0;
+        const cardBal  = e.cardBalance ?? 0;
+        const cashSpent = e.spent ?? e.cashTotal ?? 0;
+        const cardSpent = e.cardTotal ?? 0;
+        const cashLeft  = e.balance ?? e.remain ?? 0;
+        const cardLeft  = cardBal - cardSpent;
+        const totalBal  = cashBal + cardBal;
+        const totalLeft = cashLeft + (cardBal > 0 ? cardLeft : 0);
         return `<div class="hist-entry">
           <div class="hist-top">
             <span class="hist-mkt">📍 ${esc(e.market)}</span>
-            <span class="hist-rem ${(e.balance??e.remain??0)<0?'neg':''}">Қолди: ${fmt(e.balance??e.remain??0)} сўм</span>
+            <span class="hist-rem ${cashLeft<0?'neg':''}" style="font-size:.7rem">🕐 ${e.time||""}</span>
           </div>
-          <div class="hist-meta">💵 ${fmt(e.cashBalance??e.kassa??0)} · 💰 ${fmt(e.spent??e.cashTotal??0)} сўм${e.cardTotal?` · 💳 ${fmt(e.cardTotal)} сўм`:""} · 🕐 ${e.time||""}</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;font-size:.75rem;">
+            <div style="background:var(--blue-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">💵 Нақд касса</div>
+              <div style="font-weight:700;color:var(--blue)">${fmt(cashBal)} сўм</div>
+            </div>
+            ${cardBal>0?`<div style="background:var(--purple-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">💳 Карта</div>
+              <div style="font-weight:700;color:var(--purple)">${fmt(cardBal)} сўм</div>
+            </div>`:`<div></div>`}
+            <div style="background:var(--orange-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">💰 Нақд харажат</div>
+              <div style="font-weight:700;color:var(--orange)">${fmt(cashSpent)} сўм</div>
+            </div>
+            ${cardSpent>0?`<div style="background:var(--purple-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">💳 Карта харажат</div>
+              <div style="font-weight:700;color:var(--purple)">${fmt(cardSpent)} сўм</div>
+            </div>`:`<div></div>`}
+            <div style="background:var(--green-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">✅ Нақд қолди</div>
+              <div style="font-weight:700;color:var(--green)">${fmt(cashLeft)} сўм</div>
+            </div>
+            ${cardBal>0?`<div style="background:var(--purple-bg);border-radius:8px;padding:6px 8px">
+              <div style="color:var(--text2);font-size:.68rem">💳 Карта қолди</div>
+              <div style="font-weight:700;color:var(--purple)">${fmt(cardLeft)} сўм</div>
+            </div>`:`<div></div>`}
+          </div>
+
+          ${(cardBal>0)?`<div style="background:var(--bg);border-radius:8px;padding:6px 10px;font-size:.76rem;display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="color:var(--text2)">📊 Умумий касса: <b style="color:var(--text)">${fmt(totalBal)} сўм</b></span>
+            <span style="color:var(--text2)">Жами қолди: <b style="color:var(--green)">${fmt(totalLeft)} сўм</b></span>
+          </div>`:""}
+
           ${e.note?`<div class="hist-note">📝 ${esc(e.note)}</div>`:""}
-          <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
             ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
             <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
           </div>
