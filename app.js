@@ -591,10 +591,11 @@ function updateStats() {
   if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
   const debtsTotal = JSON.parse(localStorage.getItem("bz_debts") || "[]").reduce((s,d) => s + d.totalPrice, 0);
   document.getElementById("sc-debt").textContent = fmt(debtsTotal) + " сўм";
-  document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
+  const totalRemain = balance + (cardBalance - cardTotal);
+  document.getElementById("sc-remain").textContent = fmt(totalRemain) + " сўм";
   
   const chip = document.getElementById("sc-remain-chip");
-  chip.className = "stat-chip " + (balance < 0 ? "red" : balance < cashBalance * 0.2 ? "orange" : "green");
+  chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < (cashBalance + cardBalance) * 0.2 ? "orange" : "green");
   
   const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
   const progFill = document.getElementById("progFill");
