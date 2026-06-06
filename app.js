@@ -589,7 +589,8 @@ function updateStats() {
   document.getElementById("sc-cash").textContent = fmt(cashTotal) + " сўм";
   const scCardSpend = document.getElementById("sc-card-spend");
   if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
-  document.getElementById("sc-debt").textContent = "0 сўм";
+  const debtsTotal = JSON.parse(localStorage.getItem("bz_debts") || "[]").reduce((s,d) => s + d.totalPrice, 0);
+  document.getElementById("sc-debt").textContent = fmt(debtsTotal) + " сўм";
   document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
   
   const chip = document.getElementById("sc-remain-chip");
@@ -669,7 +670,8 @@ function finish() {
     r += `\n`;
   }
   r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n`;
-  r += `✅ Нақд қолди: ${fmt(balance)} сўм`;
+  r += `✅ Нақд қолди: ${fmt(balance)} сўм\n`;
+  r += `💳 Карта қолди: ${fmt(cardBalance - cardTotal)} сўм`;
 
   saveHistory({ 
     market, cashBalance, cardBalance, cashTotal, cardTotal,
@@ -810,16 +812,23 @@ function renderHistory() {
 
   cont.innerHTML = Object.keys(grps).sort((a,b)=>b.localeCompare(a)).map(day=>{
     const es = grps[day];
-    const dt = es.reduce((s,e)=>s+(e.spent||e.cashTotal||0),0);
+    const dt = es.reduce((s,e)=>s+(e.spent||e.cashTotal||0)+(e.cardTotal||0),0);
     return `<div class="hist-day">
       <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм</span></div>
       ${es.map((e,ei)=>{
         const entryId = `hentry-${day}-${ei}`;
-        const items = e.cashItems||[];
-        const itemsHtml = items.map(i=>`
+        const cashItemsArr = e.cashItems||[];
+        const cardItemsArr = e.cardItems||[];
+        const totalItems = cashItemsArr.length + cardItemsArr.length;
+        const cashHtml = cashItemsArr.map(i=>`
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border);font-size:.78rem;">
-            <span style="color:var(--text)">${esc(i.name)}${i.kg?` ${i.kg}кг`:""}${i.unitPrice?` (${fmt(i.unitPrice)})`:""}</span>
+            <span style="color:var(--text)">💰 ${esc(i.name)}${i.kg?` ${i.kg}кг`:""}${i.unitPrice?` (${fmt(i.unitPrice)})`:""}</span>
             <span style="color:var(--orange);font-weight:600">${fmt(i.totalPrice)} сўм</span>
+          </div>`).join("");
+        const cardHtml = cardItemsArr.map(i=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border);font-size:.78rem;">
+            <span style="color:var(--text)">💳 ${esc(i.name)}${i.kg?` ${i.kg}кг`:""}${i.unitPrice?` (${fmt(i.unitPrice)})`:""}</span>
+            <span style="color:var(--purple);font-weight:600">${fmt(i.totalPrice)} сўм</span>
           </div>`).join("");
         const tgReport = buildEntryReport(e);
         return `<div class="hist-entry">
@@ -827,13 +836,13 @@ function renderHistory() {
             <span class="hist-mkt">📍 ${esc(e.market)}</span>
             <span class="hist-rem ${(e.balance??e.remain??0)<0?'neg':''}">Қолди: ${fmt(e.balance??e.remain??0)} сўм</span>
           </div>
-          <div class="hist-meta">💵 ${fmt(e.cashBalance??e.kassa??0)} · 💰 ${fmt(e.spent??e.cashTotal??0)} сўм · 🕐 ${e.time||""}</div>
+          <div class="hist-meta">💵 ${fmt(e.cashBalance??e.kassa??0)} · 💰 ${fmt(e.spent??e.cashTotal??0)} сўм${e.cardTotal?` · 💳 ${fmt(e.cardTotal)} сўм`:""} · 🕐 ${e.time||""}</div>
           ${e.note?`<div class="hist-note">📝 ${esc(e.note)}</div>`:""}
           <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-            ${items.length?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${items.length} та товар</button>`:""}
+            ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
             <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
           </div>
-          ${items.length?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${itemsHtml}</div>`:""}
+          ${totalItems?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${cashHtml}${cardHtml}</div>`:""}
         </div>`;
       }).join("")}
     </div>`;
@@ -1007,10 +1016,10 @@ let priceChartInst = null;
 
 function buildPriceHistory() {
   const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  const map = {}; // { "Мош": [{date, price}] }
+  const map = {};
   h.forEach(entry => {
-    if (!entry.cashItems) return;
-    entry.cashItems.forEach(it => {
+    const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
+    allItems.forEach(it => {
       const key = it.name.trim();
       if (!map[key]) map[key] = [];
       map[key].push({ date: entry.date, price: it.unitPrice || it.totalPrice });
@@ -1078,12 +1087,11 @@ function renderTopExpenses() {
   const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
   const itemMap = {}, mktMap = {};
   h.forEach(entry => {
-    mktMap[entry.market] = (mktMap[entry.market] || 0) + (entry.spent || entry.cashTotal || 0);
-    if (entry.cashItems) {
-      entry.cashItems.forEach(it => {
-        itemMap[it.name] = (itemMap[it.name] || 0) + it.totalPrice;
-      });
-    }
+    mktMap[entry.market] = (mktMap[entry.market] || 0) + (entry.spent || entry.cashTotal || 0) + (entry.cardTotal || 0);
+    const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
+    allItems.forEach(it => {
+      itemMap[it.name] = (itemMap[it.name] || 0) + it.totalPrice;
+    });
   });
 
   const topItems = Object.entries(itemMap).sort((a,b) => b[1]-a[1]).slice(0, 8);
@@ -1130,12 +1138,14 @@ function exportCSV() {
   const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
   const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
 
-  let csv = "\uFEFF"; // BOM for Excel UTF-8
+  let csv = "\uFEFF";
   csv += "ЗАКУПКА ТАРИХИ\n";
-  csv += "Сана,Вақт,Бозор,Касса (сўм),Харажат (сўм),Қолдиқ (сўм),Товарлар,Изоҳ\n";
+  csv += "Сана,Вақт,Бозор,Нақд касса,Нақд харажат,Карта харажат,Қолдиқ,Товарлар,Изоҳ\n";
   h.forEach(e => {
-    const items = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм").join(" | ");
-    csv += [e.date, e.time || "", e.market, e.cashBalance || 0, e.cashTotal || e.spent || 0, e.balance || 0, `"${items}"`, `"${(e.note||"").replace(/"/g,'""')}"`].join(",") + "\n";
+    const cashItemsStr = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [нақд]").join(" | ");
+    const cardItemsStr = (e.cardItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [карта]").join(" | ");
+    const allItems = [cashItemsStr, cardItemsStr].filter(Boolean).join(" | ");
+    csv += [e.date, e.time || "", e.market, e.cashBalance || 0, e.cashTotal || e.spent || 0, e.cardTotal || 0, e.balance || 0, `"${allItems}"`, `"${(e.note||"").replace(/"/g,'""')}"`].join(",") + "\n";
   });
 
   csv += "\nҚАРЗЛАР\n";
@@ -1723,13 +1733,14 @@ function buildReport(days, label) {
   const period = h.filter(e => (e.date || "") >= cutStr);
   if (!period.length) return null;
 
-  const total   = period.reduce((s, e) => s + (e.cashTotal || e.spent || 0), 0);
+  const total   = period.reduce((s, e) => s + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0), 0);
   const markets = {};
   const items   = {};
 
   period.forEach(e => {
-    markets[e.market] = (markets[e.market] || 0) + (e.cashTotal || e.spent || 0);
-    (e.cashItems || []).forEach(it => {
+    markets[e.market] = (markets[e.market] || 0) + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0);
+    const allItems = [...(e.cashItems||[]), ...(e.cardItems||[])];
+    allItems.forEach(it => {
       items[it.name] = (items[it.name] || 0) + it.totalPrice;
     });
   });
@@ -1777,11 +1788,11 @@ function buildReportData(days) {
   const cutStr = cutoff.toISOString().slice(0, 10);
   const period = h.filter(e => (e.date || "") >= cutStr);
   if (!period.length) return null;
-  const total = period.reduce((s, e) => s + (e.cashTotal || e.spent || 0), 0);
+  const total = period.reduce((s, e) => s + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0), 0);
   const markets = {}, items = {};
   period.forEach(e => {
-    markets[e.market] = (markets[e.market] || 0) + (e.cashTotal || e.spent || 0);
-    (e.cashItems || []).forEach(it => { items[it.name] = (items[it.name] || 0) + it.totalPrice; });
+    markets[e.market] = (markets[e.market] || 0) + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0);
+    [...(e.cashItems||[]), ...(e.cardItems||[])].forEach(it => { items[it.name] = (items[it.name] || 0) + it.totalPrice; });
   });
   const topMarket = Object.entries(markets).sort((a,b) => b[1]-a[1])[0];
   const topItem   = Object.entries(items).sort((a,b) => b[1]-a[1])[0];
