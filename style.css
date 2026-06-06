@@ -302,7 +302,6 @@ body.dark .market-btn { background: #2c2c2e; }
 }
 .add-btn:active { opacity: .7; }
 .green-btn  { background: var(--green); }
-.purple-btn { background: var(--purple); }
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
