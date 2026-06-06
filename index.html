@@ -97,10 +97,10 @@
       </div>
       <input id="customMarket" class="field" placeholder="Бозор номи..." style="display:none; margin-top:8px"/>
       
-      <p class="card-title" style="margin-top:16px">💵 Кассадаги пул</p>
+      <p class="card-title" style="margin-top:16px">💵 Нақд касса</p>
       <div class="cash-row">
         <div class="cash-display-box">
-          <span class="cash-label">Жорий касса:</span>
+          <span class="cash-label">Жорий нақд касса:</span>
           <input id="income" type="text" class="field cash-display" readonly placeholder="0 сўм"/>
         </div>
         <div class="cash-add-row">
@@ -108,19 +108,39 @@
           <button class="add-btn green-btn" onclick="addToCashBalance()">+</button>
         </div>
       </div>
+
+      <p class="card-title" style="margin-top:16px">💳 Карта касса</p>
+      <div class="cash-row">
+        <div class="cash-display-box">
+          <span class="cash-label">Жорий карта:</span>
+          <input id="cardIncome" type="text" class="field cash-display card-display" readonly placeholder="0 сўм"/>
+        </div>
+        <div class="cash-add-row">
+          <input id="addCardBalance" type="number" class="field inp-flex" placeholder="Картага пул қўшиш"/>
+          <button class="add-btn purple-btn" onclick="addToCardBalance()">+</button>
+        </div>
+      </div>
     </div>
 
     <!-- live stats (har doim ko'rinadi) -->
     <div class="stats-row" id="statsRow">
       <div class="stat-chip blue">
-        <span class="sc-label">Касса</span>
+        <span class="sc-label">Нақд касса</span>
         <span class="sc-val" id="sc-kassa">0 сўм</span>
+      </div>
+      <div class="stat-chip purple">
+        <span class="sc-label">Карта касса</span>
+        <span class="sc-val" id="sc-card-kassa">0 сўм</span>
       </div>
       <div class="stat-chip orange">
         <span class="sc-label">Нақд харажат</span>
         <span class="sc-val" id="sc-cash">0 сўм</span>
       </div>
-      <div class="stat-chip purple">
+      <div class="stat-chip red">
+        <span class="sc-label">Карта харажат</span>
+        <span class="sc-val" id="sc-card-spend">0 сўм</span>
+      </div>
+      <div class="stat-chip orange">
         <span class="sc-label">Қарз</span>
         <span class="sc-val" id="sc-debt">0 сўм</span>
       </div>
@@ -135,7 +155,7 @@
       <div class="prog-fill" id="progFill" style="width:0%"></div>
     </div>
 
-    <!-- ТЕЗ ҚЎШИШ (QUICK ADD) -->
+    <!-- ТЕЗ ҚЎШИШ (QUICK ADD) - НАҚД -->
     <div class="quick-add-bar">
       <button class="qa-mic-btn" id="micBtn" onclick="toggleVoice()" title="Овозли киритиш">🎤</button>
       <input id="cashInp" class="field qa-inp" placeholder="Мош 10кг (15000) 150000"
@@ -158,6 +178,27 @@
       <div id="cashList" class="item-list"></div>
       <div class="subtotal cash-subtotal" id="cashSub" style="display:none">
         Жами нақд: <b id="cashSubVal">0</b> сўм
+      </div>
+    </div>
+
+    <!-- ТЕЗ ҚЎШИШ (QUICK ADD) - КАРТА -->
+    <div class="quick-add-bar">
+      <input id="cardInp" class="field qa-inp" placeholder="💳 Карта: Гўшт 200000"
+             onkeydown="if(event.key==='Enter')addCard()"/>
+      <button class="add-btn purple-btn" onclick="addCard()">+</button>
+    </div>
+
+    <!-- карта товар -->
+    <div class="card">
+      <div class="section-head">
+        <span class="section-icon">💳</span>
+        <span class="section-label">Карта товар</span>
+        <span class="count-badge" style="background:var(--purple-bg);color:var(--purple)" id="card-count">0</span>
+      </div>
+      <p class="hint-text">Формат: <code>Гўшт 200000</code> ёки <code>Гўшт 5кг (40000) 200000</code></p>
+      <div id="cardList" class="item-list"></div>
+      <div class="subtotal" id="cardSub" style="display:none;color:var(--purple)">
+        Жами карта: <b id="cardSubVal">0</b> сўм
       </div>
     </div>
     
@@ -351,59 +392,79 @@
       &nbsp;&nbsp;&nbsp;Execute as: <b>Me</b> · Access: <b>Anyone</b><br/>
       4. URL нусха олиб пастга жойлаштиринг
     </p>
-    <div style="background:var(--bg);border-radius:10px;padding:10px;margin:8px 0;font-size:.72rem;font-family:monospace;overflow-x:auto;white-space:pre;line-height:1.6;color:var(--text2);max-height:200px;overflow-y:auto">function doGet(e) {
-  try {
-    var raw = e.parameter.data;
-    var data = JSON.parse(decodeURIComponent(raw));
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    <div style="background:var(--bg);border-radius:10px;padding:10px;margin:8px 0;font-size:.72rem;font-family:monospace;overflow-x:auto;white-space:pre;line-height:1.6;color:var(--text2);max-height:200px;overflow-y:auto">var SHEET_PURCHASE = "Закупка";
+var SHEET_ITEMS    = "Товарлар";
+var SHEET_DEBT     = "Қарзлар";
+var SHEET_BACKUP   = "Backup";
+var SHEET_REPORTS  = "Ҳисоботлар";
 
-    if (data.type === "purchase") {
-      var sh = ss.getSheetByName("Закупка")
-             || ss.insertSheet("Закупка");
-      if (sh.getLastRow() === 0)
-        sh.appendRow(["Сана","Вақт","Бозор",
-          "Касса","Харажат","Қолдиқ","Товарлар","Изоҳ"]);
-      sh.appendRow([data.date, data.time, data.market,
-        data.cashBalance, data.cashTotal, data.balance,
-        data.items.map(function(i){
-          return i.name+(i.kg?" "+i.kg+"кг":"")+" - "+i.totalPrice+" сўм";
-        }).join("; "), data.note || ""]);
-    }
+function getOrCreate(ss,name){return ss.getSheetByName(name)||ss.insertSheet(name);}
+function d(v){return v||"";}
+function n(v){return Number(v)||0;}
+function styleHeader(sheet,cols,hex){
+  sheet.getRange(1,1,1,cols).setFontWeight("bold").setBackground(hex).setFontColor("#ffffff").setHorizontalAlignment("center");
+  sheet.setFrozenRows(1);
+}
 
-    if (data.type === "debt") {
-      var sh2 = ss.getSheetByName("Қарзлар")
-              || ss.insertSheet("Қарзлар");
-      if (sh2.getLastRow() === 0)
-        sh2.appendRow(["Сана","Ким","Бозор",
-          "Товар","кг","Нарх","Жами","Сана2"]);
-      sh2.appendRow([data.date, data.who, data.market,
-        data.name, data.kg, data.unitPrice,
-        data.totalPrice, data.savedAt]);
-    }
-
-    if (data.type === "full_backup") {
-      var shb = ss.getSheetByName("Backup")
-              || ss.insertSheet("Backup");
-      if (shb.getLastRow() === 0)
-        shb.appendRow(["Backup Сана","Касса","Тарих сони",
-          "Қарз сони","Жами қарз","Қарзлар"]);
-      var debtNames = (data.debts||[]).map(function(d){
-        return d.name+" "+d.totalPrice+" сўм"+(d.who?" ("+d.who+")":"");
-      }).join("; ");
-      shb.appendRow([data.backupDate, data.cashBalance,
-        data.historyCount, data.debtCount,
-        data.debtTotal, debtNames]);
-    }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:true}))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:false,error:err.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
+function processData(data){
+  var ss=SpreadsheetApp.getActiveSpreadsheet();
+  if(data.type==="purchase"){
+    var sh=getOrCreate(ss,SHEET_PURCHASE);
+    if(sh.getLastRow()===0){sh.appendRow(["Сана","Вақт","Бозор","Касса","Нақд харажат","Карта харажат","Қолдиқ","Товарлар","Изоҳ"]);styleHeader(sh,9,"#007AFF");}
+    var iStr=(data.items||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм"+(i.payType?" ["+i.payType+"]":"");return t;}).join("; ");
+    sh.appendRow([d(data.date),d(data.time),d(data.market),n(data.cashBalance),n(data.cashTotal),n(data.cardTotal),n(data.balance),iStr,d(data.note)]);
+    var shi=getOrCreate(ss,SHEET_ITEMS);
+    if(shi.getLastRow()===0){shi.appendRow(["Сана","Вақт","Бозор","Товар номи","кг","Бирлик нарх","Жами нарх","Тўлов тури"]);styleHeader(shi,8,"#34C759");}
+    (data.items||[]).forEach(function(i){shi.appendRow([d(data.date),d(data.time),d(data.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),d(i.payType)]);});
   }
-}</div>
+  if(data.type==="debt"){
+    var sh2=getOrCreate(ss,SHEET_DEBT);
+    if(sh2.getLastRow()===0){sh2.appendRow(["Сана","Вақт","Ким","Бозор","Товар","кг","Бирлик нарх","Жами нарх","Сақланган сана"]);styleHeader(sh2,9,"#AF52DE");}
+    sh2.appendRow([d(data.date),d(data.time),d(data.who),d(data.market),d(data.name),d(data.kg),n(data.unitPrice),n(data.totalPrice),d(data.savedAt)]);
+  }
+  if(data.type==="full_backup"){
+    var shb=getOrCreate(ss,SHEET_BACKUP);
+    if(shb.getLastRow()===0){shb.appendRow(["Backup сана","Касса","Закупка сони","Қарз сони","Жами қарз","Қарзлар рўйхати"]);styleHeader(shb,6,"#FF9500");}
+    var dList=(data.debts||[]).map(function(d2){return d2.name+" "+n(d2.totalPrice)+" сўм"+(d2.who?" ("+d2.who+")":"");}).join("; ");
+    shb.appendRow([d(data.backupDate),n(data.cashBalance),n(data.historyCount),n(data.debtCount),n(data.debtTotal),dList]);
+    if(data.recentHistory&&data.recentHistory.length){
+      var shP=getOrCreate(ss,SHEET_PURCHASE);var shI=getOrCreate(ss,SHEET_ITEMS);
+      if(shP.getLastRow()===0){shP.appendRow(["Сана","Вақт","Бозор","Касса","Нақд харажат","Карта харажат","Қолдиқ","Товарлар","Изоҳ"]);styleHeader(shP,9,"#007AFF");}
+      if(shI.getLastRow()===0){shI.appendRow(["Сана","Вақт","Бозор","Товар номи","кг","Бирлик нарх","Жами нарх","Тўлов тури"]);styleHeader(shI,8,"#34C759");}
+      var exist={};
+      if(shP.getLastRow()>1)shP.getRange(2,1,shP.getLastRow()-1,2).getValues().forEach(function(r){exist[r[0]+"_"+r[1]]=true;});
+      data.recentHistory.forEach(function(e){
+        var key=d(e.date)+"_"+d(e.time);if(exist[key])return;
+        var iS=(e.cashItems||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм [нақд]";return t;}).concat(
+          (e.cardItems||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм [карта]";return t;})).join("; ");
+        shP.appendRow([d(e.date),d(e.time),d(e.market),n(e.cashBalance||e.kassa),n(e.spent||e.cashTotal),n(e.cardTotal),n(e.balance||e.remain),iS,d(e.note)]);
+        (e.cashItems||[]).forEach(function(i){shI.appendRow([d(e.date),d(e.time),d(e.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),"нақд"]);});
+        (e.cardItems||[]).forEach(function(i){shI.appendRow([d(e.date),d(e.time),d(e.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),"карта"]);});
+      });
+    }
+  }
+  if(data.type==="delete_debt"){
+    var shd=ss.getSheetByName(SHEET_DEBT);
+    if(shd){if(data.clearAll){if(shd.getLastRow()>1)shd.deleteRows(2,shd.getLastRow()-1);}
+    else{var lr=shd.getLastRow();if(lr>1){var vals=shd.getRange(2,1,lr-1,9).getValues();for(var i=vals.length-1;i>=0;i--){if(String(vals[i][4])===String(data.name||"")&&String(vals[i][2])===String(data.who||"")&&String(vals[i][0])===String(data.date||"")&&Number(vals[i][7])===Number(data.totalPrice||0)){shd.deleteRow(i+2);break;}}}}}
+  }
+  if(data.type==="weekly_report"||data.type==="monthly_report"){
+    var shr=getOrCreate(ss,SHEET_REPORTS);
+    if(shr.getLastRow()===0){shr.appendRow(["Тури","Сана","Давр","Бозор сони","Жами харажат","Ўртача кунлик","Энг кўп бозор","Энг кўп товар"]);styleHeader(shr,8,"#5856D6");}
+    shr.appendRow([data.type==="weekly_report"?"Ҳафталик":"Ойлик",d(data.generatedAt),d(data.fromDate)+" — "+d(data.toDate),n(data.tripCount),n(data.totalSpent),n(data.avgDaily),d(data.topMarket),d(data.topItem)]);
+  }
+}
+
+function doPost(e){
+  try{var data=JSON.parse(e.postData.contents);processData(data);return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);}
+  catch(err){Logger.log("ERROR: "+err.toString());return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.toString()})).setMimeType(ContentService.MimeType.JSON);}
+}
+function doGet(e){
+  try{var data=JSON.parse(decodeURIComponent(e.parameter.data));processData(data);return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);}
+  catch(err){return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.toString()})).setMimeType(ContentService.MimeType.JSON);}
+}
+function onOpen(){SpreadsheetApp.getUi().createMenu("🛒 Bozorlik").addItem("📐 Устунларни кенгайтириш","autoResizeAll").addToUi();}
+function autoResizeAll(){SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(sh){sh.autoResizeColumns(1,sh.getLastColumn());});SpreadsheetApp.getUi().alert("✅ Барча устунлар кенгайтирилди!");}</div>
     <label class="field-label">Web App URL</label>
     <input type="text" id="gsUrl" class="field" placeholder="https://script.google.com/macros/s/..."/>
     <div class="modal-btns">

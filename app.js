@@ -156,8 +156,33 @@ function addToCashBalance() {
   showToast("✅ Кассага " + fmt(val) + " сўм қўшилди");
 }
 
+/* ── KARTA BALANS ── */
+function getCardBalance() {
+  return +localStorage.getItem("bz_card_balance") || 0;
+}
+
+function setCardBalance(amount) {
+  localStorage.setItem("bz_card_balance", amount);
+  return amount;
+}
+
+function addToCardBalance() {
+  const inp = document.getElementById("addCardBalance");
+  const val = +inp.value;
+  if (!val || val <= 0) { 
+    showToast("⚠️ Миқдорни киритинг"); 
+    return; 
+  }
+  const newBalance = getCardBalance() + val;
+  setCardBalance(newBalance);
+  inp.value = "";
+  updateStats();
+  showToast("✅ Картага " + fmt(val) + " сўм қўшилди");
+}
+
 /* ── STATE ── */
 let cashItems = [];
+let cardItems = [];
 let period    = "week";
 let barInst   = null;
 let pieInst   = null;
@@ -324,7 +349,54 @@ function renderCash() {
   document.getElementById("cashSubVal").textContent = fmt(total);
 }
 
-/* ── DEBT (ҚАРЗ ТОВАР) ── */
+/* ── CARD ITEMS (КАРТА ТОВАР) ── */
+function addCard() {
+  const inp = document.getElementById("cardInp");
+  const t = inp.value.trim(); if (!t) return;
+  const p = parse(t);
+  if (!p) { showToast("⚠️ Формат: Гўшт 200000"); return; }
+  
+  cardItems.push(p);
+  inp.value = "";
+  inp.focus();
+  renderCard();
+  updateStats();
+}
+function delCard(i) {
+  cardItems.splice(i, 1);
+  renderCard();
+  updateStats();
+}
+function editCard(i) {
+  const it = cardItems[i];
+  document.getElementById("cardInp").value = it.kg
+    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
+  delCard(i);
+  document.getElementById("cardInp").focus();
+}
+function renderCard() {
+  const list = document.getElementById("cardList");
+  const cnt  = cardItems.length;
+  document.getElementById("card-count").textContent = cnt;
+  if (!cnt) { list.innerHTML = `<div class="empty-state"><span class="empty-icon">💳</span>Ҳали карта товар йўқ</div>`; document.getElementById("cardSub").style.display="none"; return; }
+  list.innerHTML = cardItems.map((it,i) => `
+    <div class="item-row" id="card-row-${i}" style="border-left:3px solid var(--purple);padding-left:10px">
+      <div class="item-body">
+        <div class="item-name">${esc(it.name)}${it.kg?` <span style="font-weight:400;color:var(--text2);font-size:.78rem">${it.kg}кг</span>`:""}</div>
+        ${it.unitPrice?`<div class="item-sub">1кг = ${fmt(it.unitPrice)} сўм</div>`:""}
+      </div>
+      <span class="item-price" style="color:var(--purple)">${fmt(it.totalPrice)}</span>
+      <div class="row-btns">
+        <button class="row-btn edit" onclick="editCard(${i})">✏️</button>
+        <button class="row-btn" onclick="delCard(${i})">✕</button>
+      </div>
+    </div>`).join("");
+  const lastEl = document.getElementById(`card-row-${cnt - 1}`);
+  animateItemAdd(lastEl);
+  const total = cardItems.reduce((s,it)=>s+it.totalPrice,0);
+  document.getElementById("cardSub").style.display = "block";
+  document.getElementById("cardSubVal").textContent = fmt(total);
+}
 function addDebt() {
   const inp  = document.getElementById("debtInp");
   const t    = inp.value.trim(); 
@@ -502,14 +574,21 @@ function clearAllDebts() {
 /* ── STATS ── */
 function updateStats() {
   const cashBalance = getCashBalance();
+  const cardBalance = getCardBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const spent = cashTotal;
-  const balance = cashBalance - spent;
+  const cardTotal = cardItems.reduce((s,it) => s + it.totalPrice, 0);
+  const balance = cashBalance - cashTotal;
 
   document.getElementById("income").value = fmt(cashBalance) + " сўм";
+  const cardIncEl = document.getElementById("cardIncome");
+  if (cardIncEl) cardIncEl.value = fmt(cardBalance) + " сўм";
   
   document.getElementById("sc-kassa").textContent = fmt(cashBalance) + " сўм";
+  const scCardKassa = document.getElementById("sc-card-kassa");
+  if (scCardKassa) scCardKassa.textContent = fmt(cardBalance) + " сўм";
   document.getElementById("sc-cash").textContent = fmt(cashTotal) + " сўм";
+  const scCardSpend = document.getElementById("sc-card-spend");
+  if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
   document.getElementById("sc-debt").textContent = "0 сўм";
   document.getElementById("sc-remain").textContent = fmt(balance) + " сўм";
   
@@ -528,17 +607,15 @@ function updateStats() {
   if (statsRow) statsRow.style.display = "grid";
   if (progTrack) progTrack.style.display = "block";
 
-  // Dashboard виджетини янгилаш
   updateDashboard();
 
-  // 100% га етганда конфетти 🎉
   if (pct >= 100 && cashBalance > 0) launchConfetti();
 }
 
 /* ── FINISH ── */
 function finish() {
-  if (!cashItems.length) { 
-    showToast("⚠️ Нақд товарлар йўқ!"); 
+  if (!cashItems.length && !cardItems.length) { 
+    showToast("⚠️ Товарлар йўқ!"); 
     return; 
   }
   if (!selectedMarket) { 
@@ -548,7 +625,9 @@ function finish() {
   
   const market = getMarket();
   const cashBalance = getCashBalance();
+  const cardBalance = getCardBalance();
   const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
+  const cardTotal = cardItems.reduce((s,it) => s + it.totalPrice, 0);
   const balance = cashBalance - cashTotal;
   const now = new Date();
   const dateStr = now.toLocaleDateString("ru-RU", {day: "2-digit", month: "2-digit", year: "numeric"});
@@ -557,55 +636,72 @@ function finish() {
 
   let r = `Расход · ${dateStr}\n`;
   r += `📍 Бозор: ${market}\n`;
-  r += `💵 Касса: ${fmt(cashBalance)} сўм\n`;
+  r += `💵 Нақд касса: ${fmt(cashBalance)} сўм\n`;
+  r += `💳 Карта: ${fmt(cardBalance)} сўм\n`;
   r += `\n`;
-  r += `💰 Нақд товарлар:\n`;
-  
-  cashItems.forEach(it => { 
-    r += `• ${it.name}`; 
-    if (it.kg) r += ` ${it.kg}кг`; 
-    if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
-    r += ` — ${fmt(it.totalPrice)} сўм\n`; 
-  });
-  
-  r += `\n`;
+
+  if (cashItems.length) {
+    r += `💰 Нақд товарлар:\n`;
+    cashItems.forEach(it => { 
+      r += `• ${it.name}`; 
+      if (it.kg) r += ` ${it.kg}кг`; 
+      if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
+      r += ` — ${fmt(it.totalPrice)} сўм\n`; 
+    });
+    r += `💰 Нақд жами: ${fmt(cashTotal)} сўм\n`;
+    r += `\n`;
+  }
+
+  if (cardItems.length) {
+    r += `💳 Карта товарлар:\n`;
+    cardItems.forEach(it => { 
+      r += `• ${it.name}`; 
+      if (it.kg) r += ` ${it.kg}кг`; 
+      if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
+      r += ` — ${fmt(it.totalPrice)} сўм\n`; 
+    });
+    r += `💳 Карта жами: ${fmt(cardTotal)} сўм\n`;
+    r += `\n`;
+  }
+
   if (note) {
     r += `📝 Изоҳ: ${note}\n`;
     r += `\n`;
   }
-  r += `💰 Общий: ${fmt(cashTotal)} сўм\n`;
-  r += `✅ Қолди: ${fmt(balance)} сўм`;
+  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n`;
+  r += `✅ Нақд қолди: ${fmt(balance)} сўм`;
 
   saveHistory({ 
-    market, cashBalance, cashTotal, spent: cashTotal, balance, 
-    cashItems: [...cashItems], date: today(), time: timeStr, note 
+    market, cashBalance, cardBalance, cashTotal, cardTotal,
+    spent: cashTotal, balance, 
+    cashItems: [...cashItems], cardItems: [...cardItems],
+    date: today(), time: timeStr, note 
   });
 
-  // Чек учун маълумот сақлаш
-  lastReceiptData = { market, cashBalance, cashTotal, balance, cashItems: [...cashItems], date: today(), time: timeStr, note };
+  lastReceiptData = { market, cashBalance, cardBalance, cashTotal, cardTotal, balance, cashItems: [...cashItems], cardItems: [...cardItems], date: today(), time: timeStr, note };
   const receiptBtn = document.getElementById("receiptBtn");
   if (receiptBtn) receiptBtn.style.display = "";
 
-  /* Google Sheets га юбориш */
   const gsData = {
     type: "purchase",
     date: today(),
     time: timeStr,
     market,
     cashBalance,
+    cardBalance,
     cashTotal,
+    cardTotal,
     balance,
     note,
-    items: cashItems.map(it => ({
-      name: it.name,
-      kg: it.kg || "",
-      unitPrice: it.unitPrice || "",
-      totalPrice: it.totalPrice
-    }))
+    items: [
+      ...cashItems.map(it => ({ name: it.name, kg: it.kg || "", unitPrice: it.unitPrice || "", totalPrice: it.totalPrice, payType: "нақд" })),
+      ...cardItems.map(it => ({ name: it.name, kg: it.kg || "", unitPrice: it.unitPrice || "", totalPrice: it.totalPrice, payType: "карта" }))
+    ]
   };
   sendToGoogleSheets(gsData);
 
   setCashBalance(balance);
+  setCardBalance(cardBalance - cardTotal);
 
   const pre = document.getElementById("report");
   if (pre) {
@@ -617,7 +713,9 @@ function finish() {
   sendTG(r);
 
   cashItems = [];
+  cardItems = [];
   renderCash();
+  renderCard();
   updateStats();
   clearNote();
   
@@ -754,17 +852,25 @@ function toggleHistItems(id) {
 
 function buildEntryReport(e) {
   const items = e.cashItems||[];
+  const cItems = e.cardItems||[];
   let r = `Расход · ${e.date||""}\n`;
   r += `📍 Бозор: ${e.market||""}\n`;
-  r += `💵 Касса: ${fmt(e.cashBalance??e.kassa??0)} сўм\n\n`;
+  r += `💵 Нақд касса: ${fmt(e.cashBalance??e.kassa??0)} сўм\n`;
+  if (e.cardBalance) r += `💳 Карта: ${fmt(e.cardBalance)} сўм\n`;
+  r += `\n`;
   if (items.length) {
     r += `💰 Нақд товарлар:\n`;
     items.forEach(i=>{ r+=`• ${i.name}`; if(i.kg) r+=` ${i.kg}кг`; if(i.unitPrice) r+=` (${fmt(i.unitPrice)})`; r+=` — ${fmt(i.totalPrice)} сўм\n`; });
-    r += `\n`;
+    r += `💰 Нақд жами: ${fmt(e.cashTotal||e.spent||0)} сўм\n\n`;
+  }
+  if (cItems.length) {
+    r += `💳 Карта товарлар:\n`;
+    cItems.forEach(i=>{ r+=`• ${i.name}`; if(i.kg) r+=` ${i.kg}кг`; if(i.unitPrice) r+=` (${fmt(i.unitPrice)})`; r+=` — ${fmt(i.totalPrice)} сўм\n`; });
+    r += `💳 Карта жами: ${fmt(e.cardTotal||0)} сўм\n\n`;
   }
   if (e.note) r += `📝 Изоҳ: ${e.note}\n\n`;
-  r += `💰 Общий: ${fmt(e.spent||e.cashTotal||0)} сўм\n`;
-  r += `✅ Қолди: ${fmt(e.balance??e.remain??0)} сўм`;
+  r += `💰 Умумий: ${fmt((e.cashTotal||e.spent||0)+(e.cardTotal||0))} сўм\n`;
+  r += `✅ Нақд қолди: ${fmt(e.balance??e.remain??0)} сўм`;
   return r;
 }
 
@@ -1062,6 +1168,7 @@ function exportJSON() {
     debts:     JSON.parse(localStorage.getItem("bz_debts")     || "[]"),
     templates: JSON.parse(localStorage.getItem("bz_templates") || "[]"),
     cashBalance: getCashBalance(),
+    cardBalance: getCardBalance(),
     tgToken:   localStorage.getItem("bz_tg_token") || "",
     tgChat:    localStorage.getItem("bz_tg_chat")  || "",
     gsUrl:     localStorage.getItem("bz_gs_url")   || "",
@@ -1117,6 +1224,7 @@ function importJSON() {
         localStorage.setItem("bz_debts",     JSON.stringify(mergedDebts));
         localStorage.setItem("bz_templates", JSON.stringify(mergedTmpl));
         if (data.cashBalance) setCashBalance(data.cashBalance);
+        if (data.cardBalance) setCardBalance(data.cardBalance);
         if (data.tgToken) localStorage.setItem("bz_tg_token", data.tgToken);
         if (data.tgChat)  localStorage.setItem("bz_tg_chat",  data.tgChat);
         if (data.gsUrl)   localStorage.setItem("bz_gs_url",   data.gsUrl);
@@ -1155,10 +1263,10 @@ async function autoBackupToSheets() {
       type:        "full_backup",
       backupDate:  todayStr,
       cashBalance: getCashBalance(),
+      cardBalance: getCardBalance(),
       historyCount: history.length,
       debtCount:   debts.length,
       debtTotal:   debts.reduce((s, d) => s + d.totalPrice, 0),
-      // Охирги 30 та тарих юборамиз (katta payload bo'lmasin)
       recentHistory: history.slice(0, 30),
       debts: debts
     };
@@ -1355,9 +1463,15 @@ let lastReceiptData = null;
 function showReceipt() {
   if (!lastReceiptData) { showToast("⚠️ Аввал тугатиш керак"); return; }
   const d = lastReceiptData;
-  const lines = (d.cashItems || []).map((it, i) =>
+  const cashLines = (d.cashItems || []).map((it, i) =>
     `<tr>
       <td>${i+1}. ${esc(it.name)}${it.kg ? " " + it.kg + "кг" : ""}</td>
+      <td style="text-align:right;white-space:nowrap">${it.unitPrice ? fmt(it.unitPrice) + " × " + it.kg + "кг = " : ""}${fmt(it.totalPrice)} сўм</td>
+    </tr>`).join("");
+
+  const cardLines = (d.cardItems || []).map((it, i) =>
+    `<tr style="color:var(--purple)">
+      <td>💳 ${i+1}. ${esc(it.name)}${it.kg ? " " + it.kg + "кг" : ""}</td>
       <td style="text-align:right;white-space:nowrap">${it.unitPrice ? fmt(it.unitPrice) + " × " + it.kg + "кг = " : ""}${fmt(it.totalPrice)} сўм</td>
     </tr>`).join("");
 
@@ -1368,11 +1482,15 @@ function showReceipt() {
       <div class="receipt-sub">${esc(d.market)} · ${d.date} ${d.time || ""}</div>
     </div>
     <div class="receipt-divider">────────────────────</div>
-    <table class="receipt-table">${lines}</table>
+    ${cashLines ? `<div style="font-size:.7rem;color:var(--text2);margin-bottom:3px;font-weight:600">💰 НАҚД</div><table class="receipt-table">${cashLines}</table>` : ""}
+    ${cardLines ? `<div style="font-size:.7rem;color:var(--purple);margin:5px 0 3px;font-weight:600">💳 КАРТА</div><table class="receipt-table">${cardLines}</table>` : ""}
     <div class="receipt-divider">────────────────────</div>
-    <div class="receipt-row"><span>Касса:</span><span>${fmt(d.cashBalance)} сўм</span></div>
-    <div class="receipt-row total-row"><span>Жами харажат:</span><span>${fmt(d.cashTotal)} сўм</span></div>
-    <div class="receipt-row remain-row"><span>Қолдиқ:</span><span>${fmt(d.balance)} сўм</span></div>
+    <div class="receipt-row"><span>Нақд касса:</span><span>${fmt(d.cashBalance)} сўм</span></div>
+    ${d.cardBalance ? `<div class="receipt-row" style="color:var(--purple)"><span>Карта:</span><span>${fmt(d.cardBalance)} сўм</span></div>` : ""}
+    ${d.cashTotal ? `<div class="receipt-row"><span>Нақд харажат:</span><span>${fmt(d.cashTotal)} сўм</span></div>` : ""}
+    ${d.cardTotal ? `<div class="receipt-row" style="color:var(--purple)"><span>Карта харажат:</span><span>${fmt(d.cardTotal)} сўм</span></div>` : ""}
+    <div class="receipt-row total-row"><span>Жами харажат:</span><span>${fmt((d.cashTotal||0)+(d.cardTotal||0))} сўм</span></div>
+    <div class="receipt-row remain-row"><span>Нақд қолдиқ:</span><span>${fmt(d.balance)} сўм</span></div>
     ${d.note ? `<div class="receipt-note">📝 ${esc(d.note)}</div>` : ""}
     <div class="receipt-footer">Rahmat! 🙏</div>`;
 
@@ -1387,10 +1505,22 @@ function closeReceiptModal(e) {
 async function shareReceipt() {
   if (!lastReceiptData) return;
   const d = lastReceiptData;
-  const lines = (d.cashItems || []).map((it, i) =>
-    `${i+1}. ${it.name}${it.kg ? " " + it.kg + "кг" : ""}${it.unitPrice ? " (" + fmt(it.unitPrice) + " × " + it.kg + ")" : ""} — ${fmt(it.totalPrice)} сўм`).join("\n");
+  const cashLines = (d.cashItems || []).map((it, i) =>
+    `${i+1}. ${it.name}${it.kg ? " " + it.kg + "кг" : ""}${it.unitPrice ? " (" + fmt(it.unitPrice) + ")" : ""} — ${fmt(it.totalPrice)} сўм`).join("\n");
+  const cardLines = (d.cardItems || []).map((it, i) =>
+    `💳${i+1}. ${it.name}${it.kg ? " " + it.kg + "кг" : ""}${it.unitPrice ? " (" + fmt(it.unitPrice) + ")" : ""} — ${fmt(it.totalPrice)} сўм`).join("\n");
 
-  const text = `🧾 ЧЕК — BOZORLIK\n📍 ${d.market} · ${d.date} ${d.time||""}\n${"─".repeat(24)}\n${lines}\n${"─".repeat(24)}\n💵 Касса: ${fmt(d.cashBalance)} сўм\n🛒 Жами: ${fmt(d.cashTotal)} сўм\n✅ Қолдиқ: ${fmt(d.balance)} сўм${d.note ? "\n📝 " + d.note : ""}`;
+  let text = `🧾 ЧЕК — BOZORLIK\n📍 ${d.market} · ${d.date} ${d.time||""}\n${"─".repeat(24)}\n`;
+  if (cashLines) text += `💰 НАҚД:\n${cashLines}\n`;
+  if (cardLines) text += `\n💳 КАРТА:\n${cardLines}\n`;
+  text += `${"─".repeat(24)}\n`;
+  text += `💵 Нақд касса: ${fmt(d.cashBalance)} сўм\n`;
+  if (d.cardBalance) text += `💳 Карта: ${fmt(d.cardBalance)} сўм\n`;
+  if (d.cashTotal) text += `💰 Нақд харажат: ${fmt(d.cashTotal)} сўм\n`;
+  if (d.cardTotal) text += `💳 Карта харажат: ${fmt(d.cardTotal)} сўм\n`;
+  text += `🛒 Жами: ${fmt((d.cashTotal||0)+(d.cardTotal||0))} сўм\n`;
+  text += `✅ Нақд қолдиқ: ${fmt(d.balance)} сўм`;
+  if (d.note) text += `\n📝 ${d.note}`;
 
   const tgToken = localStorage.getItem("bz_tg_token");
   const tgChat  = localStorage.getItem("bz_tg_chat");
@@ -1697,6 +1827,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const cashBalance = getCashBalance();
   document.getElementById("income").value = fmt(cashBalance) + " сўм";
   document.getElementById("income").readOnly = true;
+
+  const cardBalance = getCardBalance();
+  const cardIncEl = document.getElementById("cardIncome");
+  if (cardIncEl) { cardIncEl.value = fmt(cardBalance) + " сўм"; cardIncEl.readOnly = true; }
+
+  renderCard();
 
   updateStats();
 

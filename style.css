@@ -223,7 +223,7 @@ body.dark .market-btn { background: #2c2c2e; }
 
 /* ── STATS ROW ── */
 .stats-row {
-  display: grid; grid-template-columns: repeat(2, 1fr);
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 8px; margin-bottom: 10px;
 }
 .stat-chip {
@@ -699,3 +699,13 @@ body.dark .receipt-btn { background: #2c2c2e; }
 
 .cash-icon { }
 .debt-icon { }
+
+.purple-btn {
+  background: var(--purple) !important;
+  color: #fff !important;
+}
+
+.card-display {
+  background: var(--purple-bg) !important;
+  color: var(--purple) !important;
+}
