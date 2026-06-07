@@ -881,9 +881,10 @@ function renderHistory() {
           </div>`:""}
 
           ${e.note?`<div class="hist-note">📝 ${esc(e.note)}</div>`:""}
-          <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
             ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
             <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
+            <button onclick="editHistMarket('${day}',${ei})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Бозор</button>
           </div>
           ${totalItems?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${cashHtml}${cardHtml}</div>`:""}
         </div>`;
@@ -900,6 +901,63 @@ function toggleHistItems(id) {
   el.style.display = open ? "none" : "block";
   if (btn) btn.style.background = open ? "var(--blue-bg)" : "var(--green-bg)";
   if (btn) btn.style.color = open ? "var(--blue)" : "var(--green)";
+}
+
+function editHistMarket(day, idx) {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  // day + idx бўйича entry топамиз
+  const grps = {};
+  h.forEach((e, i) => {
+    const d = e.date || "";
+    if (!grps[d]) grps[d] = [];
+    grps[d].push({ e, i });
+  });
+  if (!grps[day] || !grps[day][idx]) return;
+
+  const { e, i: realIdx } = grps[day][idx];
+  const markets = JSON.parse(localStorage.getItem("bz_markets") || '["Куйлик","Фут Сити","Эко","Бошқа"]');
+  
+  // Modal яратамиз
+  let existing = document.getElementById("editMarketModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "editMarketModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center";
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:70vh;overflow-y:auto">
+      <p style="font-weight:700;font-size:1rem;margin:0 0 4px">✏️ Бозорни ўзгартириш</p>
+      <p style="color:var(--text2);font-size:.8rem;margin:0 0 14px">Ҳозирги: <b style="color:var(--orange)">${esc(e.market)}</b> · ${e.date}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        ${markets.map(m => `
+          <button onclick="confirmEditMarket(${realIdx},'${m.replace(/'/g,"\\'")}',this)"
+            style="padding:12px;border-radius:12px;border:2px solid ${m===e.market?'var(--orange)':'var(--border)'};background:${m===e.market?'var(--orange-bg)':'var(--card)'};font-size:.85rem;font-weight:600;cursor:pointer;color:var(--text);font-family:inherit">
+            ${m}
+          </button>`).join("")}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="editMarketInp" class="field" placeholder="Бошқа бозор номи..." style="flex:1" value=""/>
+        <button onclick="confirmEditMarket(${realIdx},document.getElementById('editMarketInp').value,null)"
+          style="padding:10px 16px;border-radius:12px;border:none;background:var(--orange);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">✓</button>
+      </div>
+      <button onclick="document.getElementById('editMarketModal').remove()"
+        style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer;font-family:inherit">Бекор қилиш</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+}
+
+function confirmEditMarket(idx, newMarket, btn) {
+  newMarket = (newMarket || "").trim();
+  if (!newMarket) { showToast("⚠️ Бозор номини киритинг"); return; }
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  if (!h[idx]) return;
+  const old = h[idx].market;
+  h[idx].market = newMarket;
+  localStorage.setItem("bz_history", JSON.stringify(h));
+  document.getElementById("editMarketModal")?.remove();
+  renderHistory();
+  showToast(`✅ ${old} → ${newMarket}`);
 }
 
 function buildEntryReport(e) {
