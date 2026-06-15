@@ -71,7 +71,6 @@ function initFirebase() {
     // Real-time listeners
     bzStartListeners();
 
-    // app.js DOMContentLoaded dan keyin yuklangan bo'lsa patch qilamiz
     bzPatchFunctions();
   });
 }
@@ -248,12 +247,7 @@ function bzSaveTemplates(arr) {
   ref.set(obj).catch(e => console.warn("bzSaveTemplates:", e));
 }
 
-// ─── 8. APP.JS FUNKSIYALARINI PATCH QILISH ───────────────────────────────────
-// MUHIM: app.js DOMContentLoaded ni ham ishlatadi,
-// shuning uchun biz ham DOMContentLoaded dan keyin patch qilamiz
-// LEKIN Firebase auth async — shuning uchun bzPatchFunctions
-// auth callback ichida chaqiriladi
-
+// ─── 8. APP.JS FUNKSIYALARINI PATCH QILISH ─────────────────────────────────
 function bzPatchFunctions() {
   if (window.BZ_FB.patched) return;
   window.BZ_FB.patched = true;
@@ -268,27 +262,17 @@ function bzPatchFunctions() {
   }
 
   // 8.2 addDebt → Firebase ga saqlaymiz
-  // app.js dagi addDebt ichida allDebtsArray.push qilinadi,
-  // keyin saveAllDebtsToStorage chaqiriladi
-  const _saveAllDebtsToStorage = window.saveAllDebtsToStorage;
-  if (typeof _saveAllDebtsToStorage === "function") {
-    window.saveAllDebtsToStorage = function() {
-      _saveAllDebtsToStorage();
-      // allDebtsArray dan oxirgi elementni Firebase ga yuboramiz
-      // Bu funksiya faqat addDebt va deleteAllDebt da chaqiriladi
-      // deleteAllDebt da alohida handle qilamiz
-    };
-  }
-
-  // addDebt ni to'g'ridan to'g'ri patch qilamiz
   const _addDebt = window.addDebt;
   if (typeof _addDebt === "function") {
     window.addDebt = function() {
-      const prevLen = (window.allDebtsArray || []).length;
+      // Oldingi holat
+      const prevDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+      const prevLen = prevDebts.length;
       _addDebt();
-      const arr = window.allDebtsArray || [];
-      if (arr.length > prevLen) {
-        const newDebt = arr[arr.length - 1];
+      // Yangi holatni olish
+      const newDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+      if (newDebts.length > prevLen) {
+        const newDebt = newDebts[newDebts.length - 1];
         bzSaveDebt(newDebt);
       }
     };
@@ -309,8 +293,9 @@ function bzPatchFunctions() {
   const _deleteSelectedAllDebts = window.deleteSelectedAllDebts;
   if (typeof _deleteSelectedAllDebts === "function") {
     window.deleteSelectedAllDebts = function() {
-      const selected = window.getAllSelectedDebtIndexes ? window.getAllSelectedDebtIndexes() : [];
-      const arr = window.allDebtsArray || [];
+      const selected = typeof getAllSelectedDebtIndexes === "function"
+        ? getAllSelectedDebtIndexes() : [];
+      const arr = JSON.parse(localStorage.getItem("bz_debts") || "[]");
       const toDelete = selected.map(i => arr[i]).filter(Boolean);
       _deleteSelectedAllDebts();
       toDelete.forEach(d => bzDeleteDebt(d));
@@ -322,7 +307,7 @@ function bzPatchFunctions() {
   if (typeof _clearAllDebts === "function") {
     window.clearAllDebts = function() {
       _clearAllDebts();
-      bzDeleteAllDebts();
+      bzDeleteAllDebts(); // Firebase dan ham o'chirish
     };
   }
 
@@ -369,46 +354,20 @@ function bzPatchFunctions() {
     };
   }
 
-  // 8.9 saveTg
-  const _saveTg = window.saveTg;
-  if (typeof _saveTg === "function") {
-    window.saveTg = function() {
-      _saveTg();
-      bzSaveSettings({
-        tg_token: localStorage.getItem("bz_tg_token") || "",
-        tg_chat:  localStorage.getItem("bz_tg_chat")  || ""
-      });
-    };
-  }
-
-  // 8.10 saveGs
-  const _saveGs = window.saveGs;
-  if (typeof _saveGs === "function") {
-    window.saveGs = function() {
-      _saveGs();
-      bzSaveSettings({ gs_url: localStorage.getItem("bz_gs_url") || "" });
-    };
-  }
-
-  // 8.11 toggleDark
-  const _toggleDark = window.toggleDark;
-  if (typeof _toggleDark === "function") {
-    window.toggleDark = function() {
-      _toggleDark();
-      bzSaveSettings({ dark: document.body.classList.contains("dark") });
-    };
-  }
 
   // 8.12 confirmEditMarket — tarix yozuvida bozor nomini o'zgartirish
   const _confirmEditMarket = window.confirmEditMarket;
   if (typeof _confirmEditMarket === "function") {
     window.confirmEditMarket = function(idx, newMarket, btn) {
+      // app.js idx ni ishlatadi — history arraydan to'g'ri entry ni olamiz
       const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
       const entry = h[idx];
+      const fbKey = entry && entry.fbKey;
       _confirmEditMarket(idx, newMarket, btn);
-      if (entry && entry.fbKey) {
-        const ref = bzRef("history/" + entry.fbKey + "/market");
-        if (ref) ref.set((newMarket || "").trim());
+      // Firebase da yangilash
+      if (fbKey && newMarket && newMarket.trim()) {
+        const ref = bzRef("history/" + fbKey + "/market");
+        if (ref) ref.set(newMarket.trim());
       }
     };
   }
@@ -425,74 +384,7 @@ function bzToast(msg) {
   }, 600);
 }
 
-// ─── 10. MIGRATSIYA: localStorage → Firebase ─────────────────────────────────
-window.bzMigrateToFirebase = async function() {
-  if (!window.BZ_FB.connected) {
-    if (typeof showToast === "function") showToast("⚠️ Firebase ulanmagan, kuting...");
-    return;
-  }
-
-  if (typeof showToast === "function") showToast("🔄 Ko'chirilmoqda...");
-
-  // Balans
-  const cash = +localStorage.getItem("bz_cash_balance") || 0;
-  const card = +localStorage.getItem("bz_card_balance") || 0;
-  bzSaveBalance(cash, card);
-
-  // Tarix
-  const history = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  const histRef = bzRef("history");
-  if (histRef && history.length) {
-    const obj = {};
-    history.forEach(entry => {
-      if (!entry.fbKey) entry.fbKey = histRef.push().key;
-      obj[entry.fbKey] = entry;
-    });
-    await histRef.set(obj);
-    localStorage.setItem("bz_history", JSON.stringify(history));
-  }
-
-  // Qarzlar
-  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
-  const debtRef = bzRef("debts");
-  if (debtRef && debts.length) {
-    const obj = {};
-    debts.forEach(debt => {
-      const key = debt.fbKey || bzSafeKey(debt.id || Date.now());
-      debt.fbKey = key;
-      obj[key] = debt;
-    });
-    await debtRef.set(obj);
-    localStorage.setItem("bz_debts", JSON.stringify(debts));
-  }
-
-  // Shablonlar
-  const templates = JSON.parse(localStorage.getItem("bz_templates") || "[]");
-  if (templates.length) bzSaveTemplates(templates);
-
-  // Sozlamalar
-  const settings = {};
-  const tgToken = localStorage.getItem("bz_tg_token");
-  const tgChat  = localStorage.getItem("bz_tg_chat");
-  const gsUrl   = localStorage.getItem("bz_gs_url");
-  const dark    = localStorage.getItem("bz_dark");
-  if (tgToken) settings.tg_token = tgToken;
-  if (tgChat)  settings.tg_chat  = tgChat;
-  if (gsUrl)   settings.gs_url   = gsUrl;
-  if (dark)    settings.dark     = dark === "1";
-  if (Object.keys(settings).length) bzSaveSettings(settings);
-
-  const msg = `✅ ${history.length} tarix, ${debts.length} qarz Firebase ga ko'chirildi!`;
-  console.log(msg);
-  if (typeof showToast === "function") showToast(msg);
-};
-
-// ─── 11. ISHGA TUSHIRISH ─────────────────────────────────────────────────────
-// app.js dan OLDIN yuklangani uchun:
-// 1) SDK ni yuklaymiz
-// 2) DOMContentLoaded dan keyin initFirebase
-// 3) Firebase auth callback ichida bzPatchFunctions (app.js funksiyalari tayyor bo'lganda)
-
+// ─── 10. ISHGA TUSHIRISH ─────────────────────────────────────────────────────
 loadFirebaseSDK(function() {
   // SDK tayyor, ammo DOM va app.js ham tayyor bo'lishi kerak
   if (document.readyState === "loading") {

@@ -1352,76 +1352,8 @@ function importJSON() {
   input.click();
 }
 
-/* ══════════════════════════════════════════
-   ☁️ АВТОМАТИК KUNLIK BACKUP → Google Sheets
-══════════════════════════════════════════ */
 
-async function autoBackupToSheets() {
-  const cfg = getGS();
-  if (!cfg.url) return;
 
-  const lastBackup = localStorage.getItem("bz_last_backup") || "";
-  const todayStr   = today();
-  if (lastBackup === todayStr) return; // бугун аллақачон backup қилинган
-
-  const history   = JSON.parse(localStorage.getItem("bz_history")   || "[]");
-  const debts     = JSON.parse(localStorage.getItem("bz_debts")     || "[]");
-
-  if (!history.length && !debts.length) return;
-
-  try {
-    const payload = {
-      type:        "full_backup",
-      backupDate:  todayStr,
-      cashBalance: getCashBalance(),
-      cardBalance: getCardBalance(),
-      historyCount: history.length,
-      debtCount:   debts.length,
-      debtTotal:   debts.reduce((s, d) => s + d.totalPrice, 0),
-      recentHistory: history.slice(0, 30),
-      debts: debts
-    };
-
-    await fetch(cfg.url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload)
-    });
-
-    localStorage.setItem("bz_last_backup", todayStr);
-    showToast("☁️ Автоматик backup юборилди!");
-  } catch(e) {
-    // тин олиб backup қилмаслик учун уриниш кейинга қолдирилади
-  }
-}
-
-/* Backup статусини кўрсатиш */
-function getBackupStatus() {
-  const last = localStorage.getItem("bz_last_backup") || null;
-  const el = document.getElementById("backupStatusText");
-  if (!el) return;
-  if (!last) {
-    el.textContent = "Ҳали backup қилинмаган";
-    el.style.color = "var(--red)";
-  } else if (last === today()) {
-    el.textContent = "✅ Бугун backup қилинди (" + fmtD(last) + ")";
-    el.style.color = "var(--green)";
-  } else {
-    const diff = Math.round((new Date(today()) - new Date(last)) / 86400000);
-    el.textContent = `⚠️ ${diff} кун олdin (${fmtD(last)})`;
-    el.style.color = "var(--orange)";
-  }
-}
-
-async function manualBackup() {
-  const cfg = getGS();
-  if (!cfg.url) { showToast("⚠️ Аввал Google Sheets улаш керак (📊 GS тугмаси)"); return; }
-  // Кунлик лимитни олиб ташлаб мажбурий backup
-  localStorage.removeItem("bz_last_backup");
-  await autoBackupToSheets();
-  getBackupStatus();
-}
 
 
 /* ══════════════════════════════════════════
@@ -1963,11 +1895,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Dashboard
   updateDashboard();
 
-  // Автоматик кунлик backup
-  setTimeout(() => {
-    autoBackupToSheets();
-    getBackupStatus();
-  }, 2000);
 });
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {

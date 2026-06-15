@@ -1,4 +1,4 @@
-const CACHE = "bozorlik-v5";
+const CACHE = "bozorlik-v6";
 
 self.addEventListener("install", event => {
   self.skipWaiting();
@@ -7,8 +7,8 @@ self.addEventListener("install", event => {
       return cache.addAll([
         "./index.html",
         "./style.css?v=3",
-        "./firebase.js?v=1",
-        "./app.js?v=3",
+        "./firebase.js?v=2",
+        "./app.js?v=4",
         "./manifest.json",
         "./icon-192.png",
         "./icon-512.png",
