@@ -201,10 +201,15 @@ function bzSaveHistoryEntry(entry) {
      .catch(e => console.warn("bzSaveHistoryEntry:", e));
 }
 
+// Firebase key sanitizer (. # $ / [ ] bo'lmasligi kerak)
+function bzSafeKey(id) {
+  return String(id || Date.now()).replace(/[\.#$\/\[\]]/g, "_");
+}
+
 function bzSaveDebt(debt) {
   const ref = bzRef("debts");
   if (!ref) return;
-  const key = debt.fbKey || String(debt.id || (Date.now() + Math.random()));
+  const key = debt.fbKey || bzSafeKey(debt.id || Date.now());
   debt.fbKey = key;
   ref.child(key).set(debt)
      .catch(e => console.warn("bzSaveDebt:", e));
@@ -453,7 +458,7 @@ window.bzMigrateToFirebase = async function() {
   if (debtRef && debts.length) {
     const obj = {};
     debts.forEach(debt => {
-      const key = debt.fbKey || String(debt.id || Date.now() + Math.random());
+      const key = debt.fbKey || bzSafeKey(debt.id || Date.now());
       debt.fbKey = key;
       obj[key] = debt;
     });
