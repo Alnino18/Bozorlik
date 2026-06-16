@@ -7,121 +7,14 @@ function getTG() {
 }
 
 /* ── GOOGLE SHEETS CONFIG ── */
-function getGS() {
-  return {
-    url: localStorage.getItem("bz_gs_url") || ""
-  };
-}
 
-function saveGS(url) {
-  localStorage.setItem("bz_gs_url", url);
-}
 
-/* Google Sheets га маълумот юбориш */
-async function sendToGoogleSheets(data) {
-  const cfg = getGS();
-  if (!cfg.url) return;
-  try {
-    await fetch(cfg.url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(data)
-    });
-    showToast("📊 Google Sheets га сақланди!");
-  } catch (e) {
-    showToast("⚠️ Google Sheets хатолик");
-  }
-}
 
-/* Қарзни Google Sheets га юбориш */
-async function sendDebtToGoogleSheets(debt) {
-  const cfg = getGS();
-  if (!cfg.url) return;
-  try {
-    const data = {
-      type: "debt",
-      date: debt.date,
-      who: debt.who || "",
-      market: debt.market || "",
-      name: debt.name,
-      kg: debt.kg || "",
-      unitPrice: debt.unitPrice || "",
-      totalPrice: debt.totalPrice,
-      savedAt: debt.savedAt
-    };
-    await fetch(cfg.url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(data)
-    });
-  } catch (e) {
-    // silent
-  }
-}
 
-async function deleteDebtFromGoogleSheets(debt, clearAll = false) {
-  const cfg = getGS();
-  if (!cfg.url) return;
-  try {
-    const data = clearAll
-      ? { type: "delete_debt", clearAll: true }
-      : {
-          type:       "delete_debt",
-          id:         debt.id,
-          name:       debt.name,
-          who:        debt.who        || "",
-          date:       debt.date       || "",
-          totalPrice: debt.totalPrice || 0
-        };
-    await fetch(cfg.url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(data)
-    });
-  } catch (e) {
-    // silent
-  }
-}
 
-function updateGsPill() {
-  const cfg = getGS();
-  const pill = document.getElementById("gs-pill");
-  if (!pill) return;
-  if (cfg.url) {
-    pill.textContent = "📊 GS ✓";
-    pill.classList.add("connected");
-  } else {
-    pill.textContent = "📊 GS";
-    pill.classList.remove("connected");
-  }
-}
 
-function openGsModal() {
-  const cfg = getGS();
-  document.getElementById("gsUrl").value = cfg.url;
-  document.getElementById("gsModal").classList.add("open");
-}
 
-function closeGsModal(e) {
-  if (!e || e.target === document.getElementById("gsModal"))
-    document.getElementById("gsModal").classList.remove("open");
-}
 
-function saveGs() {
-  const url = document.getElementById("gsUrl").value.trim();
-  if (!url) { showToast("⚠️ Web App URL киритинг"); return; }
-  if (!url.startsWith("https://script.google.com")) {
-    showToast("⚠️ Google Apps Script URL бўлиши керак");
-    return;
-  }
-  saveGS(url);
-  updateGsPill();
-  closeGsModal();
-  showToast("✅ Google Sheets улашди!");
-}
 
 window.addEventListener("load", () => {
   const splash = document.getElementById("splash");
@@ -434,7 +327,6 @@ function addDebt() {
   renderAllDebts();
   
   showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
-  sendDebtToGoogleSheets(newDebt);
 }
 
 /* ── ALL DEBTS (БАРЧА ҚАРЗЛАР) ── */
@@ -491,7 +383,6 @@ function deleteAllDebt(idx) {
   saveAllDebtsToStorage();
   renderAllDebts();
   showToast("✅ Қарз ўчирилди");
-  deleteDebtFromGoogleSheets(debt);
 }
 
 function editAllDebt(idx) {
@@ -532,7 +423,6 @@ function deleteSelectedAllDebts() {
   saveAllDebtsToStorage();
   renderAllDebts();
   showToast(`✅ ${selected.length} та қарз ўчирилди`);
-  deletedDebts.forEach(debt => deleteDebtFromGoogleSheets(debt));
 }
 
 function selectAllAllDebts() {
@@ -567,8 +457,7 @@ function clearAllDebts() {
   allDebtsArray = [];
   saveAllDebtsToStorage();
   renderAllDebts();
-  showToast("✅ Барча қарзлар тозаланди");
-  deleteDebtFromGoogleSheets(null, true); // bulk delete
+  showToast("✅ Барча қарзлар тозаланди"); // bulk delete
 }
 
 /* ── STATS ── */
@@ -703,7 +592,6 @@ function finish() {
       ...cardItems.map(it => ({ name: it.name, kg: it.kg || "", unitPrice: it.unitPrice || "", totalPrice: it.totalPrice, payType: "карта" }))
     ]
   };
-  sendToGoogleSheets(gsData);
 
   setCashBalance(balance);
   setCardBalance(cardBalance - cardTotal);
@@ -1282,7 +1170,6 @@ function exportJSON() {
     cardBalance: getCardBalance(),
     tgToken:   localStorage.getItem("bz_tg_token") || "",
     tgChat:    localStorage.getItem("bz_tg_chat")  || "",
-    gsUrl:     localStorage.getItem("bz_gs_url")   || "",
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url  = URL.createObjectURL(blob);
@@ -1338,10 +1225,9 @@ function importJSON() {
         if (data.cardBalance) setCardBalance(data.cardBalance);
         if (data.tgToken) localStorage.setItem("bz_tg_token", data.tgToken);
         if (data.tgChat)  localStorage.setItem("bz_tg_chat",  data.tgChat);
-        if (data.gsUrl)   localStorage.setItem("bz_gs_url",   data.gsUrl);
 
         renderTemplates(); renderAllDebts(); loadAllDebts(); updateStats();
-        updateTgPill(); updateGsPill(); renderHistory();
+        updateTgPill(); renderHistory();
         showToast(`✅ Тикланди! Тарих: +${mergedHistory.length - existing.history.length} та, Қарз: +${mergedDebts.length - existing.debts.length} та`);
       } catch(err) {
         showToast("❌ Хатолик: " + err.message);
@@ -1807,7 +1693,7 @@ async function sendWeeklyReport() {
   if (!txt) { showToast("⚠️ Ҳафтада маълумот йўқ"); return; }
   await sendTGText(txt);
   const gsData = buildReportData(7);
-  if (gsData) { gsData.type = "weekly_report"; sendToGoogleSheets(gsData); }
+  if (gsData) { gsData.type = "weekly_report"; }
 }
 
 async function sendMonthlyReport() {
@@ -1815,7 +1701,7 @@ async function sendMonthlyReport() {
   if (!txt) { showToast("⚠️ Ойда маълумот йўқ"); return; }
   await sendTGText(txt);
   const gsData = buildReportData(30);
-  if (gsData) { gsData.type = "monthly_report"; sendToGoogleSheets(gsData); }
+  if (gsData) { gsData.type = "monthly_report"; }
 }
 
 function buildReportData(days) {
@@ -1864,7 +1750,6 @@ async function sendTGText(text) {
 document.addEventListener("DOMContentLoaded", () => {
   initDark();
   updateTgPill();
-  updateGsPill();
   document.getElementById("debtDate").value = today();
   document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
   renderCash();

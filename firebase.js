@@ -173,7 +173,6 @@ function bzStartListeners() {
       if (!d) return;
       if (d.tg_token) localStorage.setItem("bz_tg_token", d.tg_token);
       if (d.tg_chat)  localStorage.setItem("bz_tg_chat",  d.tg_chat);
-      if (d.gs_url)   localStorage.setItem("bz_gs_url",   d.gs_url);
       if (d.dark !== undefined) {
         localStorage.setItem("bz_dark", d.dark ? "1" : "0");
       }
@@ -394,3 +393,68 @@ loadFirebaseSDK(function() {
     setTimeout(initFirebase, 100);
   }
 });
+
+// ─── 11. FIREBASE DAN TO'G'RIDAN EKSPORT ────────────────────────────────────
+window.bzExportFromFirebase = async function() {
+  if (!window.BZ_FB.connected) {
+    if (typeof showToast === "function") showToast("⚠️ Firebase ulanmagan");
+    return;
+  }
+  if (typeof showToast === "function") showToast("🔄 Firebase dan yuklanmoqda...");
+
+  try {
+    const uid = window.BZ_FB.uid;
+    const db  = window.BZ_FB.db;
+
+    const [balSnap, histSnap, debtSnap, tmplSnap, settSnap] = await Promise.all([
+      db.ref("users/" + uid + "/balances").once("value"),
+      db.ref("users/" + uid + "/history").once("value"),
+      db.ref("users/" + uid + "/debts").once("value"),
+      db.ref("users/" + uid + "/templates").once("value"),
+      db.ref("users/" + uid + "/settings").once("value"),
+    ]);
+
+    const bal      = balSnap.val()  || {};
+    const histObj  = histSnap.val() || {};
+    const debtObj  = debtSnap.val() || {};
+    const tmplObj  = tmplSnap.val() || {};
+    const sett     = settSnap.val() || {};
+
+    const history   = Object.values(histObj).sort((a, b) => {
+      const ka = (a.date || "") + (a.time || "");
+      const kb = (b.date || "") + (b.time || "");
+      return kb.localeCompare(ka);
+    });
+    const debts     = Object.values(debtObj);
+    const templates = Object.values(tmplObj);
+
+    const data = {
+      version:     1,
+      exportedAt:  new Date().toISOString(),
+      source:      "firebase",
+      history,
+      debts,
+      templates,
+      cashBalance: bal.cash || 0,
+      cardBalance: bal.card || 0,
+      tgToken:     sett.tg_token || "",
+      tgChat:      sett.tg_chat  || "",
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = "bozorlik_firebase_" + date + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === "function") {
+      showToast("✅ " + history.length + " tarix, " + debts.length + " qarz yuklandi!");
+    }
+  } catch(e) {
+    console.warn("bzExportFromFirebase:", e);
+    if (typeof showToast === "function") showToast("❌ Xatolik: " + e.message);
+  }
+};

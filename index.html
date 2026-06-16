@@ -26,7 +26,6 @@
   </div>
   <div class="h-actions">
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
-    <button class="h-btn tg-status" id="gs-pill" onclick="openGsModal()">📊 GS</button>
     <button class="h-btn tg-status" id="tg-pill" onclick="openTgModal()">✈️ TG</button>
   </div>
 </header>
@@ -352,25 +351,14 @@
         <span id="backupStatusText" style="font-size:.8rem;font-weight:600">🔥 Firebase avtomatik saqlaydi</span>
       </div>
       <div class="backup-btn-grid">
-        <button class="backup-btn export-btn" onclick="exportJSON()">
-          <span style="font-size:1.4rem">💾</span>
-          <span class="backup-btn-label">JSON Backup</span>
-          <span class="backup-btn-sub">Файлга сақлаш</span>
-        </button>
-        <button class="backup-btn import-btn" onclick="importJSON()">
-          <span style="font-size:1.4rem">📂</span>
-          <span class="backup-btn-label">Тиклаш</span>
-          <span class="backup-btn-sub">JSON дан юклаш</span>
-        </button>
-        <button class="backup-btn cloud-btn" onclick="manualBackup()">
-          <span style="font-size:1.4rem">☁️</span>
-          <span class="backup-btn-label">Sheets Backup</span>
-          <span class="backup-btn-sub">Ҳозир юбориш</span>
+        <button class="backup-btn export-btn" onclick="bzExportFromFirebase()">
+          <span style="font-size:1.4rem">🔥</span>
+          <span class="backup-btn-label">Firebase Backup</span>
+          <span class="backup-btn-sub">Булутдан юклаш</span>
         </button>
       </div>
       <p style="font-size:.75rem;color:var(--text2);margin-top:10px;line-height:1.5">
-        💡 <b>JSON Backup</b> — Chrome кеши тозаланса ҳам тикланади.<br/>
-        ☁️ <b>Sheets Backup</b> — ҳар куни автоматик юборилади (GS улашилса).
+        🔥 <b>Firebase</b> — барча маълумотлар булутда автоматик сақланади.
       </p>
     </div>
 
@@ -385,99 +373,6 @@
   </div>
 
 </main>
-
-<!-- GS MODAL -->
-<div class="modal-bg" id="gsModal" onclick="closeGsModal(event)">
-  <div class="modal-box">
-    <p class="modal-title">📊 Google Sheets улаш</p>
-    <p class="modal-hint">
-      1. <b>script.google.com</b> → Янги лойиҳа яратинг<br/>
-      2. Қуйидаги кодни жойлаштириб сақланг<br/>
-      3. <b>Deploy → New deployment → Web App</b><br/>
-      &nbsp;&nbsp;&nbsp;Execute as: <b>Me</b> · Access: <b>Anyone</b><br/>
-      4. URL нусха олиб пастга жойлаштиринг
-    </p>
-    <div style="background:var(--bg);border-radius:10px;padding:10px;margin:8px 0;font-size:.72rem;font-family:monospace;overflow-x:auto;white-space:pre;line-height:1.6;color:var(--text2);max-height:200px;overflow-y:auto">var SHEET_PURCHASE = "Закупка";
-var SHEET_ITEMS    = "Товарлар";
-var SHEET_DEBT     = "Қарзлар";
-var SHEET_BACKUP   = "Backup";
-var SHEET_REPORTS  = "Ҳисоботлар";
-
-function getOrCreate(ss,name){return ss.getSheetByName(name)||ss.insertSheet(name);}
-function d(v){return v||"";}
-function n(v){return Number(v)||0;}
-function styleHeader(sheet,cols,hex){
-  sheet.getRange(1,1,1,cols).setFontWeight("bold").setBackground(hex).setFontColor("#ffffff").setHorizontalAlignment("center");
-  sheet.setFrozenRows(1);
-}
-
-function processData(data){
-  var ss=SpreadsheetApp.getActiveSpreadsheet();
-  if(data.type==="purchase"){
-    var sh=getOrCreate(ss,SHEET_PURCHASE);
-    if(sh.getLastRow()===0){sh.appendRow(["Сана","Вақт","Бозор","Касса","Нақд харажат","Карта харажат","Қолдиқ","Товарлар","Изоҳ"]);styleHeader(sh,9,"#007AFF");}
-    var iStr=(data.items||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм"+(i.payType?" ["+i.payType+"]":"");return t;}).join("; ");
-    sh.appendRow([d(data.date),d(data.time),d(data.market),n(data.cashBalance),n(data.cashTotal),n(data.cardTotal),n(data.balance),iStr,d(data.note)]);
-    var shi=getOrCreate(ss,SHEET_ITEMS);
-    if(shi.getLastRow()===0){shi.appendRow(["Сана","Вақт","Бозор","Товар номи","кг","Бирлик нарх","Жами нарх","Тўлов тури"]);styleHeader(shi,8,"#34C759");}
-    (data.items||[]).forEach(function(i){shi.appendRow([d(data.date),d(data.time),d(data.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),d(i.payType)]);});
-  }
-  if(data.type==="debt"){
-    var sh2=getOrCreate(ss,SHEET_DEBT);
-    if(sh2.getLastRow()===0){sh2.appendRow(["Сана","Вақт","Ким","Бозор","Товар","кг","Бирлик нарх","Жами нарх","Сақланган сана"]);styleHeader(sh2,9,"#AF52DE");}
-    sh2.appendRow([d(data.date),d(data.time),d(data.who),d(data.market),d(data.name),d(data.kg),n(data.unitPrice),n(data.totalPrice),d(data.savedAt)]);
-  }
-  if(data.type==="full_backup"){
-    var shb=getOrCreate(ss,SHEET_BACKUP);
-    if(shb.getLastRow()===0){shb.appendRow(["Backup сана","Касса","Закупка сони","Қарз сони","Жами қарз","Қарзлар рўйхати"]);styleHeader(shb,6,"#FF9500");}
-    var dList=(data.debts||[]).map(function(d2){return d2.name+" "+n(d2.totalPrice)+" сўм"+(d2.who?" ("+d2.who+")":"");}).join("; ");
-    shb.appendRow([d(data.backupDate),n(data.cashBalance),n(data.historyCount),n(data.debtCount),n(data.debtTotal),dList]);
-    if(data.recentHistory&&data.recentHistory.length){
-      var shP=getOrCreate(ss,SHEET_PURCHASE);var shI=getOrCreate(ss,SHEET_ITEMS);
-      if(shP.getLastRow()===0){shP.appendRow(["Сана","Вақт","Бозор","Касса","Нақд харажат","Карта харажат","Қолдиқ","Товарлар","Изоҳ"]);styleHeader(shP,9,"#007AFF");}
-      if(shI.getLastRow()===0){shI.appendRow(["Сана","Вақт","Бозор","Товар номи","кг","Бирлик нарх","Жами нарх","Тўлов тури"]);styleHeader(shI,8,"#34C759");}
-      var exist={};
-      if(shP.getLastRow()>1)shP.getRange(2,1,shP.getLastRow()-1,2).getValues().forEach(function(r){exist[r[0]+"_"+r[1]]=true;});
-      data.recentHistory.forEach(function(e){
-        var key=d(e.date)+"_"+d(e.time);if(exist[key])return;
-        var iS=(e.cashItems||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм [нақд]";return t;}).concat(
-          (e.cardItems||[]).map(function(i){var t=i.name;if(i.kg)t+=" "+i.kg+"кг";if(i.unitPrice)t+="("+n(i.unitPrice)+")";t+=" - "+n(i.totalPrice)+" сўм [карта]";return t;})).join("; ");
-        shP.appendRow([d(e.date),d(e.time),d(e.market),n(e.cashBalance||e.kassa),n(e.spent||e.cashTotal),n(e.cardTotal),n(e.balance||e.remain),iS,d(e.note)]);
-        (e.cashItems||[]).forEach(function(i){shI.appendRow([d(e.date),d(e.time),d(e.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),"нақд"]);});
-        (e.cardItems||[]).forEach(function(i){shI.appendRow([d(e.date),d(e.time),d(e.market),d(i.name),d(i.kg),n(i.unitPrice),n(i.totalPrice),"карта"]);});
-      });
-    }
-  }
-  if(data.type==="delete_debt"){
-    var shd=ss.getSheetByName(SHEET_DEBT);
-    if(shd){if(data.clearAll){if(shd.getLastRow()>1)shd.deleteRows(2,shd.getLastRow()-1);}
-    else{var lr=shd.getLastRow();if(lr>1){var vals=shd.getRange(2,1,lr-1,9).getValues();for(var i=vals.length-1;i>=0;i--){if(String(vals[i][4])===String(data.name||"")&&String(vals[i][2])===String(data.who||"")&&String(vals[i][0])===String(data.date||"")&&Number(vals[i][7])===Number(data.totalPrice||0)){shd.deleteRow(i+2);break;}}}}}
-  }
-  if(data.type==="weekly_report"||data.type==="monthly_report"){
-    var shr=getOrCreate(ss,SHEET_REPORTS);
-    if(shr.getLastRow()===0){shr.appendRow(["Тури","Сана","Давр","Бозор сони","Жами харажат","Ўртача кунлик","Энг кўп бозор","Энг кўп товар"]);styleHeader(shr,8,"#5856D6");}
-    shr.appendRow([data.type==="weekly_report"?"Ҳафталик":"Ойлик",d(data.generatedAt),d(data.fromDate)+" — "+d(data.toDate),n(data.tripCount),n(data.totalSpent),n(data.avgDaily),d(data.topMarket),d(data.topItem)]);
-  }
-}
-
-function doPost(e){
-  try{var data=JSON.parse(e.postData.contents);processData(data);return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);}
-  catch(err){Logger.log("ERROR: "+err.toString());return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.toString()})).setMimeType(ContentService.MimeType.JSON);}
-}
-function doGet(e){
-  try{var data=JSON.parse(decodeURIComponent(e.parameter.data));processData(data);return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);}
-  catch(err){return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.toString()})).setMimeType(ContentService.MimeType.JSON);}
-}
-function onOpen(){SpreadsheetApp.getUi().createMenu("🛒 Bozorlik").addItem("📐 Устунларни кенгайтириш","autoResizeAll").addToUi();}
-function autoResizeAll(){SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(sh){sh.autoResizeColumns(1,sh.getLastColumn());});SpreadsheetApp.getUi().alert("✅ Барча устунлар кенгайтирилди!");}</div>
-    <label class="field-label">Web App URL</label>
-    <input type="text" id="gsUrl" class="field" placeholder="https://script.google.com/macros/s/..."/>
-    <div class="modal-btns">
-      <button class="modal-cancel" onclick="closeGsModal()">Бекор</button>
-      <button class="modal-save" onclick="saveGs()">Улаш ✓</button>
-    </div>
-  </div>
-</div>
 
 <!-- RECEIPT MODAL -->
 <div class="modal-bg" id="receiptModal" onclick="closeReceiptModal(event)">
