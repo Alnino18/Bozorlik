@@ -662,18 +662,18 @@ body.dark .receipt-btn { background: #2c2c2e; }
   border-radius: var(--radius); padding: 14px 16px;
   gap: 0; position: relative; overflow: hidden;
 }
-.dw-col { flex: 1; text-align: center; padding: 0 2px; }
+.dw-col { flex: 1; text-align: center; padding: 0 1px; }
 .dw-label {
-  font-size: .6rem; color: rgba(255,255,255,.65);
-  font-weight: 600; margin-bottom: 4px;
+  font-size: .55rem; color: rgba(255,255,255,.65);
+  font-weight: 600; margin-bottom: 3px;
 }
 .dw-val {
-  font-size: .82rem; color: #fff; font-weight: 700;
+  font-size: .72rem; color: #fff; font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: -.2px;
+  letter-spacing: -.3px;
 }
-.dw-market { font-size: .7rem; }
-.dw-divider { width: 0.5px; height: 32px; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.dw-market { font-size: .62rem; }
+.dw-divider { width: 0.5px; height: 28px; background: rgba(255,255,255,.25); flex-shrink: 0; }
 
 /* ── QUICK ADD BAR ── */
 .quick-add-bar {

@@ -1588,23 +1588,27 @@ async function shareReceipt() {
 ══════════════════════════════════════════ */
 function updateDashboard() {
   const kassa = getCashBalance();
+  const card  = getCardBalance();
   const h     = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  // Бугунги харажат
-  const todayStr  = today();
+
+  // Бугунги умумий расход (нақд + карта)
+  const todayStr   = today();
   const todaySpent = h.filter(e => e.date === todayStr)
-                      .reduce((s, e) => s + (e.cashTotal || e.spent || 0), 0);
+                      .reduce((s, e) => s + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0), 0);
 
   // Охирги бозор
-  const last = h.length ? h[h.length - 1] : null;
+  const last    = h.length ? h[h.length - 1] : null;
   const lastMkt = last ? (last.market || "—") + " " + fmtD(last.date) : "—";
 
-  const kwEl = document.getElementById("dw-kassa");
-  const twEl = document.getElementById("dw-today");
-  const lwEl = document.getElementById("dw-last");
+  const kwEl   = document.getElementById("dw-kassa");
+  const cardEl = document.getElementById("dw-card");
+  const twEl   = document.getElementById("dw-today");
+  const lwEl   = document.getElementById("dw-last");
 
-  if (kwEl) kwEl.textContent = fmt(kassa) + " сўм";
-  if (twEl) twEl.textContent = todaySpent ? fmt(todaySpent) + " сўм" : "0 сўм";
-  if (lwEl) lwEl.textContent = lastMkt;
+  if (kwEl)   kwEl.textContent   = fmt(kassa) + " сўм";
+  if (cardEl) cardEl.textContent = fmt(card)  + " сўм";
+  if (twEl)   twEl.textContent   = fmt(todaySpent) + " сўм";
+  if (lwEl)   lwEl.textContent   = lastMkt;
 }
 
 /* ══════════════════════════════════════════
