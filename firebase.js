@@ -110,25 +110,27 @@ function bzStartListeners() {
   // 6.2 Tarix
   const histRef = bzRef("history");
   if (histRef) {
-    histRef.on("value", snap => {
+    // Avval oxirgi 500 tasini yuklaymiz — tezroq ishlaydi
+    histRef.orderByChild("date").limitToLast(500).on("value", snap => {
       const d = snap.val();
       if (!d) return;
       const arr = Object.values(d).sort((a, b) => {
         const ka = (a.date || "") + (a.time || "");
         const kb = (b.date || "") + (b.time || "");
         return kb.localeCompare(ka);
-      }).slice(0, 300);
+      });
 
       window._bzSyncingHistory = true;
       localStorage.setItem("bz_history", JSON.stringify(arr));
       window._bzSyncingHistory = false;
 
-      // Agar history tab ochiq bo'lsa render qilamiz
+      // UI yangilash
       const histTab = document.getElementById("tab-history");
       if (histTab && histTab.classList.contains("active") && typeof renderHistory === "function") {
         renderHistory();
       }
       if (typeof updateDashboard === "function") updateDashboard();
+      if (typeof updateStats === "function") updateStats();
     });
   }
 
