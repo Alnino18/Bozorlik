@@ -52,6 +52,19 @@ function initFirebase() {
 
   window.BZ_FB.db = firebase.database();
 
+  // Auth tayyor bo'lguncha kutamiz
+  function waitForAuth(cb, tries) {
+    if (tries === undefined) tries = 0;
+    if (typeof firebase.auth === "function") {
+      cb();
+    } else if (tries < 20) {
+      setTimeout(() => waitForAuth(cb, tries + 1), 200);
+    } else {
+      console.warn("Firebase Auth yuklanmadi");
+    }
+  }
+
+  waitForAuth(function() {
   firebase.auth().signInAnonymously().catch(err => {
     console.warn("Firebase Auth:", err.message);
   });
@@ -88,6 +101,7 @@ function initFirebase() {
 
     bzPatchFunctions();
   });
+  }); // waitForAuth end
 }
 
 // ─── 5. FIREBASE YO'L HELPER ─────────────────────────────────────────────────
