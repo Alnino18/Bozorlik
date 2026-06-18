@@ -58,7 +58,22 @@ function initFirebase() {
 
   firebase.auth().onAuthStateChanged(user => {
     if (!user) return;
-    window.BZ_FB.uid = user.uid;
+
+    // Doimiy UID: bir marta saqlangan UID ni ishlatamiz
+    // Bu kompyuter, telefon, brauzer tozalansa ham bir xil qoladi
+    const SAVED_UID_KEY = "bz_device_uid";
+    let deviceUID = localStorage.getItem(SAVED_UID_KEY);
+
+    if (!deviceUID) {
+      // Birinchi ulanish — auth UID ni doimiy saqlaymiz
+      deviceUID = user.uid;
+      localStorage.setItem(SAVED_UID_KEY, deviceUID);
+      console.log("✅ Yangi qurilma UID saqlandi:", deviceUID);
+    } else {
+      console.log("✅ Saqlangan UID ishlatildi:", deviceUID);
+    }
+
+    window.BZ_FB.uid = deviceUID;
     window.BZ_FB.connected = true;
 
     // Онлайн/офлайн кузатиш
