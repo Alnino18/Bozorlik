@@ -120,19 +120,297 @@ function getMarket() {
 }
 
 /* ── DARK MODE ── */
+
+
+
+/* ══════════════════════════════════════════
+   🤖 TELEGRAM BOT — botga yozsa ilova kiritadi
+   Bot: @BotFather da yaratilgan bot
+   Webhook o'rniga polling ishlatamiz
+══════════════════════════════════════════ */
+let _bzTgPollTimer = null;
+let _bzTgLastUpdate = 0;
+
+function bzStartTgBot() {
+  const token = localStorage.getItem("bz_tg_token");
+  if (!token || token.length < 10) return;
+
+  // Har 5 soniyada yangi xabarlarni tekshiramiz
+  _bzTgPollTimer = setInterval(bzTgPoll, 5000);
+  console.log("🤖 Telegram bot polling boshlandi");
+}
+
+async function bzTgPoll() {
+  const token = localStorage.getItem("bz_tg_token");
+  if (!token) return;
+
+  try {
+    const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${_bzTgLastUpdate + 1}&limit=5&timeout=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.ok || !data.result.length) return;
+
+    for (const update of data.result) {
+      _bzTgLastUpdate = update.update_id;
+      const msg = update.message;
+      if (!msg || !msg.text) continue;
+
+      const chatId = String(localStorage.getItem("bz_tg_chat") || "");
+      if (chatId && String(msg.chat.id) !== chatId) continue; // Faqat o'z chatidan
+
+      bzTgHandleMessage(msg, token);
+    }
+  } catch(e) {
+    // Tarmoq xatosi — jimgina o'tkazib yuboramiz
+  }
+}
+
+async function bzTgHandleMessage(msg, token) {
+  const text = (msg.text || "").trim();
+  const chatId = msg.chat.id;
+
+  // Buyruqlar
+  if (text === "/start" || text === "/help") {
+    await bzTgReply(token, chatId,
+      "👋 *Bozorlik Bot*\n\n" +
+      "Xarajat kiritish uchun yozing:\n" +
+      "`Tovar nomi narx`\n\n" +
+      "Masalan:\n" +
+      "`Go'sht 50000`\n" +
+      "`Un 5kg 45000`\n\n" +
+      "Boshqa buyruqlar:\n" +
+      "/balans — hozirgi balans\n" +
+      "/oxirgi — oxirgi xarajat"
+    );
+    return;
+  }
+
+  if (text === "/balans") {
+    const cash = getCashBalance();
+    const card = getCardBalance();
+    await bzTgReply(token, chatId,
+      `💵 Нақд: *${fmt(cash)} сўм*\n💳 Карта: *${fmt(card)} сўм*`
+    );
+    return;
+  }
+
+  if (text === "/oxirgi") {
+    const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+    const last = h.length ? h.reduce((a,b) => {
+      return ((b.date||"")+(b.time||"")) > ((a.date||"")+(a.time||"")) ? b : a;
+    }) : null;
+    if (last) {
+      await bzTgReply(token, chatId,
+        `🕐 Oxirgi: *${last.market}* — ${last.date}\n💰 ${fmt((last.cashTotal||0)+(last.cardTotal||0))} сўм`
+      );
+    } else {
+      await bzTgReply(token, chatId, "Tarix bo'sh");
+    }
+    return;
+  }
+
+  // Tovar kiritish: "Go'sht 50000" yoki "Un 5kg 45000"
+  const match = text.match(/^(.+?)\s+(\d+(?:[.,]\d+)?(?:kg|кг))?\s*(\d{3,})$/i);
+  if (match) {
+    const name  = match[1].trim();
+    const kg    = match[2] ? parseFloat(match[2]) : null;
+    const price = parseInt(match[3].replace(/[.,]/g,""));
+
+    // localStorage ga qo'shamiz (aktiv bozor bo'lsa)
+    const market = localStorage.getItem("bz_active_market") || "Telegram";
+
+    // Quick add sifatida saqlaymiz
+    const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+    const today2 = typeof today === "function" ? today() : new Date().toISOString().slice(0,10);
+
+    // Bugungi bozor bor bo'lsa unga qo'shamiz
+    const todayEntry = h.find(e => e.date === today2 && e.market === market);
+    if (todayEntry) {
+      if (!todayEntry.cashItems) todayEntry.cashItems = [];
+      todayEntry.cashItems.push({ name, kg: kg||"", unitPrice: price, totalPrice: price });
+      todayEntry.cashTotal = (todayEntry.cashItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
+      todayEntry.spent = todayEntry.cashTotal;
+      localStorage.setItem("bz_history", JSON.stringify(h));
+      if (typeof bzSaveHistoryEntry === "function") bzSaveHistoryEntry(todayEntry);
+    } else {
+      // Yangi entry
+      const newEntry = {
+        date: today2,
+        time: new Date().toTimeString().slice(0,5),
+        market,
+        cashItems: [{ name, kg: kg||"", unitPrice: price, totalPrice: price }],
+        cashTotal: price,
+        spent: price,
+        cardItems: [],
+        cardTotal: 0,
+        cashBalance: getCashBalance(),
+        cardBalance: getCardBalance(),
+        fbKey: null
+      };
+      h.push(newEntry);
+      localStorage.setItem("bz_history", JSON.stringify(h));
+      if (typeof bzSaveHistoryEntry === "function") bzSaveHistoryEntry(newEntry);
+    }
+
+    if (typeof renderHistory === "function") renderHistory();
+    if (typeof updateDashboard === "function") updateDashboard();
+
+    await bzTgReply(token, chatId,
+      `✅ Kiritildi: *${name}*${kg ? ` ${kg}кг` : ""} — *${fmt(price)} сўм*`
+    );
+    return;
+  }
+
+  // Tushunmadim
+  await bzTgReply(token, chatId,
+    "❓ Tushunmadim. /help ni bosing"
+  );
+}
+
+async function bzTgReply(token, chatId, text) {
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" })
+    });
+  } catch(e) {}
+}
+
+/* ══════════════════════════════════════════
+   👆 SWIPE GESTURE — tarix kartasi
+   Chapga: o'chirish | O'ngga: tahrirlash
+══════════════════════════════════════════ */
+function bzAddSwipe(el, onLeft, onRight) {
+  let startX = 0, startY = 0, moved = false;
+  const THRESHOLD = 60;
+
+  el.addEventListener("touchstart", e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    moved = false;
+    el.style.transition = "none";
+  }, { passive: true });
+
+  el.addEventListener("touchmove", e => {
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) return; // Vertikal scroll
+    moved = true;
+    const clamped = Math.max(-120, Math.min(120, dx));
+    el.style.transform = `translateX(${clamped}px)`;
+    // Rang ko'rsatish
+    if (dx < -20) el.style.background = "var(--red-bg, #fff0f0)";
+    else if (dx > 20) el.style.background = "var(--green-bg, #f0fff4)";
+    else el.style.background = "";
+  }, { passive: true });
+
+  el.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    el.style.transition = "transform .25s ease, background .25s";
+    el.style.transform = "translateX(0)";
+    el.style.background = "";
+    if (!moved) return;
+    if (dx < -THRESHOLD) { bzHaptic("medium"); onLeft && onLeft(); }
+    else if (dx > THRESHOLD) { bzHaptic("light"); onRight && onRight(); }
+  }, { passive: true });
+}
+
+/* ══════════════════════════════════════════
+   📳 HAPTIC FEEDBACK
+══════════════════════════════════════════ */
+
+function bzAttachSwipes() {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  document.querySelectorAll(".hist-entry[data-idx]").forEach(el => {
+    const idx = +el.getAttribute("data-idx");
+    bzAddSwipe(
+      el,
+      // Chapga — o'chirish
+      () => {
+        if (!confirm("Bu yozuvni o'chirasizmi?")) return;
+        h.splice(idx, 1);
+        localStorage.setItem("bz_history", JSON.stringify(h));
+        if (typeof bzClearHistory === "undefined") {
+          // Firebase dan ham o'chirish
+          const entry = h[idx];
+          if (entry && entry.fbKey && typeof bzRef === "function") {
+            const ref = bzRef("history/" + entry.fbKey);
+            if (ref) ref.remove();
+          }
+        }
+        renderHistory();
+        if (typeof updateDashboard === "function") updateDashboard();
+        showToast("🗑️ O'chirildi");
+      },
+      // O'ngga — tahrirlash
+      () => {
+        if (typeof editHistEntry === "function") editHistEntry(idx);
+      }
+    );
+  });
+}
+
+function bzHaptic(type) {
+  if (!navigator.vibrate) return;
+  const patterns = {
+    light:   [10],
+    medium:  [20],
+    heavy:   [30],
+    success: [10, 50, 10],
+    error:   [50, 30, 50],
+    warning: [20, 30, 20]
+  };
+  navigator.vibrate(patterns[type] || patterns.light);
+}
+
 function toggleDark() {
   const d = document.body.classList.toggle("dark");
   localStorage.setItem("bz_dark", d ? "1" : "0");
   document.getElementById("dark-btn").textContent = d ? "☀️" : "🌙";
   document.getElementById("tc").content = d ? "#0f1117" : "#007aff";
   if (barInst || pieInst) updateCharts();
+  // Haptic feedback
+  bzHaptic("light");
 }
 function initDark() {
-  if (localStorage.getItem("bz_dark") === "1") {
-    document.body.classList.add("dark");
-    document.getElementById("dark-btn").textContent = "☀️";
-    document.getElementById("tc").content = "#0f1117";
+  // Foydalanuvchi qo'lda o'zgartirganmi?
+  const manual = localStorage.getItem("bz_dark");
+  if (manual !== null) {
+    // Qo'lda o'rnatilgan
+    if (manual === "1") {
+      document.body.classList.add("dark");
+      document.getElementById("dark-btn").textContent = "☀️";
+      document.getElementById("tc").content = "#0f1117";
+    }
+  } else {
+    // Vaqtga qarab avtomatik: 20:00 - 07:00 dark
+    const hour = new Date().getHours();
+    const autoDark = hour >= 20 || hour < 7;
+    if (autoDark) {
+      document.body.classList.add("dark");
+      document.getElementById("dark-btn").textContent = "☀️";
+      document.getElementById("tc").content = "#0f1117";
+    }
   }
+  // Har 1 daqiqada tekshirish (qo'lda o'rnatilmagan bo'lsa)
+  setInterval(() => {
+    if (localStorage.getItem("bz_dark") !== null) return;
+    const hour = new Date().getHours();
+    const autoDark = hour >= 20 || hour < 7;
+    const isDark = document.body.classList.contains("dark");
+    if (autoDark && !isDark) {
+      document.body.classList.add("dark");
+      document.getElementById("dark-btn").textContent = "☀️";
+      document.getElementById("tc").content = "#0f1117";
+      if (barInst || pieInst) updateCharts();
+    } else if (!autoDark && isDark) {
+      document.body.classList.remove("dark");
+      document.getElementById("dark-btn").textContent = "🌙";
+      document.getElementById("tc").content = "#007aff";
+      if (barInst || pieInst) updateCharts();
+    }
+  }, 60000);
 }
 
 /* ── TABS ── */
@@ -291,6 +569,7 @@ function renderCard() {
   document.getElementById("cardSubVal").textContent = fmt(total);
 }
 function addDebt() {
+  bzHaptic("medium");
   const inp  = document.getElementById("debtInp");
   const t    = inp.value.trim(); 
   if (!t) { 
@@ -507,6 +786,7 @@ function updateStats() {
 
 /* ── FINISH ── */
 function finish() {
+  bzHaptic("success");
   if (!cashItems.length && !cardItems.length) { 
     showToast("⚠️ Товарлар йўқ!"); 
     return; 
@@ -732,7 +1012,7 @@ function renderHistory() {
         const cardLeft  = cardBal - cardSpent;
         const totalBal  = cashBal + cardBal;
         const totalLeft = cashLeft + (cardBal > 0 ? cardLeft : 0);
-        return `<div class="hist-entry">
+        return `<div class="hist-entry" data-idx="${realIdx}">
           <div class="hist-top">
             <span class="hist-mkt">📍 ${esc(e.market)}</span>
             <span class="hist-rem ${cashLeft<0?'neg':''}" style="font-size:.7rem">🕐 ${e.time||""}</span>
@@ -782,6 +1062,7 @@ function renderHistory() {
       }).join("")}
     </div>`;
   }).join("");
+  setTimeout(bzAttachSwipes, 100);
 }
 
 function toggleHistItems(id) {
@@ -1902,6 +2183,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Dashboard
   updateDashboard();
+
+  // Telegram Bot polling
+  setTimeout(bzStartTgBot, 3000);
 
 });
 

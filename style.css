@@ -708,3 +708,21 @@ body.dark .receipt-btn { background: #2c2c2e; }
   background: var(--purple-bg) !important;
   color: var(--purple) !important;
 }
+
+/* ── SWIPE GESTURE ── */
+.hist-entry {
+  touch-action: pan-y;
+  transition: transform .25s ease, background .25s;
+  cursor: grab;
+}
+.hist-entry:active { cursor: grabbing; }
+
+/* Swipe hint — birinchi marta */
+.swipe-hint {
+  text-align: center;
+  font-size: .72rem;
+  color: var(--text2);
+  padding: 6px 0 2px;
+  opacity: .7;
+}
+
