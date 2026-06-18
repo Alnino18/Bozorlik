@@ -773,6 +773,7 @@ function renderHistory() {
             ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
             <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
             <button onclick="editHistMarket('${day}',${ei})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Бозор</button>
+            <button onclick="editHistEntry(${realIdx})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--green-bg);color:var(--green);font-family:inherit">✏️ Таҳрир</button>
           </div>
           ${totalItems?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${cashHtml}${cardHtml}</div>`:""}
         </div>`;
@@ -847,6 +848,117 @@ function confirmEditMarket(idx, newMarket, btn) {
   renderHistory();
   showToast(`✅ ${old} → ${newMarket}`);
 }
+
+
+/* ══════════════════════════════════════════
+   ✏️ ТАРИХ ЁЗУВИНИ ТО'ЛИҚ ТАҲРИРЛАШ
+══════════════════════════════════════════ */
+function editHistEntry(idx) {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  if (!h[idx]) return;
+  const e = h[idx];
+
+  let existing = document.getElementById("editHistModal");
+  if (existing) existing.remove();
+
+  const cashRows = (e.cashItems || []).map((item, i) => `
+    <div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin-bottom:6px" id="cash-item-${i}">
+      <div style="font-size:.72rem;color:var(--text2);margin-bottom:4px">💰 Нақд товар ${i+1}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="field" style="flex:2;min-width:100px" placeholder="Товар номи" id="c-name-${i}" value="${esc(item.name||'')}"/>
+        <input class="field" style="flex:1;min-width:70px" type="number" placeholder="кг" id="c-kg-${i}" value="${item.kg||''}"/>
+        <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Нарх" id="c-price-${i}" value="${item.unitPrice||''}"/>
+        <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Жами" id="c-total-${i}" value="${item.totalPrice||''}"/>
+      </div>
+    </div>`).join("");
+
+  const cardRows = (e.cardItems || []).map((item, i) => `
+    <div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin-bottom:6px" id="card-item-${i}">
+      <div style="font-size:.72rem;color:var(--text2);margin-bottom:4px">💳 Карта товар ${i+1}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="field" style="flex:2;min-width:100px" placeholder="Товар номи" id="d-name-${i}" value="${esc(item.name||'')}"/>
+        <input class="field" style="flex:1;min-width:70px" type="number" placeholder="кг" id="d-kg-${i}" value="${item.kg||''}"/>
+        <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Нарх" id="d-price-${i}" value="${item.unitPrice||''}"/>
+        <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Жами" id="d-total-${i}" value="${item.totalPrice||''}"/>
+      </div>
+    </div>`).join("");
+
+  const modal = document.createElement("div");
+  modal.id = "editHistModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;overflow-y:auto";
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px 30px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <p style="font-weight:700;font-size:1rem;margin:0 0 2px">✏️ Ёзувни таҳрирлаш</p>
+      <p style="color:var(--text2);font-size:.78rem;margin:0 0 14px">${e.date||''} · ${esc(e.market||'')}</p>
+
+      <label style="font-size:.75rem;color:var(--text2);font-weight:600">📝 Изоҳ</label>
+      <input class="field" id="eh-note" style="margin-bottom:12px" placeholder="Изоҳ..." value="${esc(e.note||'')}"/>
+
+      ${cashRows ? `<div style="font-weight:600;font-size:.8rem;margin-bottom:8px;color:var(--text)">💰 Нақд товарлар</div>${cashRows}` : ""}
+      ${cardRows ? `<div style="font-weight:600;font-size:.8rem;margin-bottom:8px;color:var(--text)">💳 Карта товарлар</div>${cardRows}` : ""}
+
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="document.getElementById('editHistModal').remove()"
+          style="flex:1;padding:12px;border-radius:12px;border:none;background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer;font-family:inherit">Бекор</button>
+        <button onclick="saveHistEntry(${idx})"
+          style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">✅ Сақлаш</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener("click", ev => { if (ev.target === modal) modal.remove(); });
+}
+
+function saveHistEntry(idx) {
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  if (!h[idx]) return;
+  const e = h[idx];
+
+  // Izoh
+  const noteEl = document.getElementById("eh-note");
+  if (noteEl) e.note = noteEl.value.trim();
+
+  // Naqd tovarlar
+  (e.cashItems || []).forEach((item, i) => {
+    const nameEl  = document.getElementById(`c-name-${i}`);
+    const kgEl    = document.getElementById(`c-kg-${i}`);
+    const priceEl = document.getElementById(`c-price-${i}`);
+    const totalEl = document.getElementById(`c-total-${i}`);
+    if (nameEl)  item.name       = nameEl.value.trim();
+    if (kgEl)    item.kg         = kgEl.value ? +kgEl.value : "";
+    if (priceEl) item.unitPrice  = +priceEl.value || 0;
+    if (totalEl) item.totalPrice = +totalEl.value || item.totalPrice;
+  });
+
+  // Karta tovarlar
+  (e.cardItems || []).forEach((item, i) => {
+    const nameEl  = document.getElementById(`d-name-${i}`);
+    const kgEl    = document.getElementById(`d-kg-${i}`);
+    const priceEl = document.getElementById(`d-price-${i}`);
+    const totalEl = document.getElementById(`d-total-${i}`);
+    if (nameEl)  item.name       = nameEl.value.trim();
+    if (kgEl)    item.kg         = kgEl.value ? +kgEl.value : "";
+    if (priceEl) item.unitPrice  = +priceEl.value || 0;
+    if (totalEl) item.totalPrice = +totalEl.value || item.totalPrice;
+  });
+
+  // Yangilangan jami
+  e.cashTotal = (e.cashItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
+  e.cardTotal = (e.cardItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
+  e.spent     = e.cashTotal;
+
+  h[idx] = e;
+  localStorage.setItem("bz_history", JSON.stringify(h));
+
+  // Firebase ga yuborish
+  if (typeof bzSaveHistoryEntry === "function") bzSaveHistoryEntry(e);
+
+  document.getElementById("editHistModal")?.remove();
+  renderHistory();
+  if (typeof updateDashboard === "function") updateDashboard();
+  showToast("✅ Ёзув янгиланди!");
+}
+
 
 function buildEntryReport(e) {
   const items = e.cashItems||[];
