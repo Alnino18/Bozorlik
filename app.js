@@ -103,6 +103,7 @@ function selectMarket(btn, name) {
   document.querySelectorAll(".market-btn").forEach(b => b.classList.remove("selected"));
   btn.classList.add("selected");
   selectedMarket = name;
+  localStorage.setItem("bz_active_market", name); // TG Bot uchun
   const customInput = document.getElementById("customMarket");
   if (name === "Бошқа") {
     customInput.style.display = "block";
@@ -135,9 +136,20 @@ function bzStartTgBot() {
   const token = localStorage.getItem("bz_tg_token");
   if (!token || token.length < 10) return;
 
+  // Avval eski timerni tozalaymiz
+  if (_bzTgPollTimer) clearInterval(_bzTgPollTimer);
+
   // Har 5 soniyada yangi xabarlarni tekshiramiz
   _bzTgPollTimer = setInterval(bzTgPoll, 5000);
   console.log("🤖 Telegram bot polling boshlandi");
+}
+
+function bzStopTgBot() {
+  if (_bzTgPollTimer) {
+    clearInterval(_bzTgPollTimer);
+    _bzTgPollTimer = null;
+    console.log("🤖 Telegram bot polling to'xtatildi");
+  }
 }
 
 async function bzTgPoll() {
@@ -221,7 +233,7 @@ async function bzTgHandleMessage(msg, token) {
 
     // Quick add sifatida saqlaymiz
     const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-    const today2 = typeof today === "function" ? today() : new Date().toISOString().slice(0,10);
+    const today2 = new Date().toISOString().slice(0,10);
 
     // Bugungi bozor bor bo'lsa unga qo'shamiz
     const todayEntry = h.find(e => e.date === today2 && e.market === market);
@@ -329,15 +341,13 @@ function bzAttachSwipes() {
       // Chapga — o'chirish
       () => {
         if (!confirm("Bu yozuvni o'chirasizmi?")) return;
+        const entry = h[idx]; // Firebase uchun oldin olamiz
         h.splice(idx, 1);
         localStorage.setItem("bz_history", JSON.stringify(h));
-        if (typeof bzClearHistory === "undefined") {
-          // Firebase dan ham o'chirish
-          const entry = h[idx];
-          if (entry && entry.fbKey && typeof bzRef === "function") {
-            const ref = bzRef("history/" + entry.fbKey);
-            if (ref) ref.remove();
-          }
+        // Firebase dan ham o'chirish
+        if (entry && entry.fbKey && typeof bzRef === "function") {
+          const ref = bzRef("history/" + entry.fbKey);
+          if (ref) ref.remove();
         }
         renderHistory();
         if (typeof updateDashboard === "function") updateDashboard();
@@ -993,6 +1003,7 @@ function renderHistory() {
         const entryId = `hentry-${day}-${ei}`;
         const histArr = JSON.parse(localStorage.getItem("bz_history")||"[]");
         const realIdx = histArr.findIndex(h => h === e || (h.fbKey && h.fbKey === e.fbKey) || (h.date === e.date && h.time === e.time && h.market === e.market));
+        if (realIdx < 0) return ""; // Topilmasa skip
         const cashItemsArr = e.cashItems||[];
         const cardItemsArr = e.cardItems||[];
         const totalItems = cashItemsArr.length + cardItemsArr.length;
