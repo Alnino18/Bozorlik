@@ -52,6 +52,57 @@ function initFirebase() {
 
   window.BZ_FB.db = firebase.database();
 
+  // ─── PIN HIMOYA ─────────────────────────────────────────────────────────────
+  const BZ_PIN = "1234"; // ← O'zingizning PIN ni shu yerga yozing!
+
+  function bzShowPinScreen(onSuccess) {
+    if (sessionStorage.getItem("bz_pin_ok") === "1") { onSuccess(); return; }
+
+    const overlay = document.createElement("div");
+    overlay.id = "bzPinOverlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:var(--bg,#f0f4ff);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px";
+    overlay.innerHTML = `
+      <img src="icon-192.png" style="width:80px;height:80px;border-radius:20px;margin-bottom:8px"/>
+      <p style="font-size:1.1rem;font-weight:700;color:var(--text,#111);margin:0">Bozorlik</p>
+      <p style="font-size:.85rem;color:var(--text2,#888);margin:0">PIN kodni kiriting</p>
+      <div style="display:flex;gap:10px;margin:8px 0" id="bzPinDots">
+        ${[0,1,2,3].map(i=>`<div id="bzDot${i}" style="width:14px;height:14px;border-radius:50%;background:var(--border,#ddd)"></div>`).join("")}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,72px);gap:10px">
+        ${[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map(n=>`
+          <button onclick="bzPinPress('${n}')" style="width:72px;height:72px;border-radius:50%;border:none;background:${n===""?"transparent":"var(--card,#fff)"};font-size:1.4rem;font-weight:600;cursor:pointer;color:var(--text,#111);box-shadow:${n===""?"none":"0 2px 8px rgba(0,0,0,.08)"};font-family:inherit">${n}</button>
+        `).join("")}
+      </div>
+      <p id="bzPinErr" style="color:#ff3b30;font-size:.8rem;min-height:18px;margin:0"></p>
+    `;
+    document.body.appendChild(overlay);
+
+    let entered = "";
+    window.bzPinPress = function(val) {
+      if (val === "") return;
+      if (val === "⌫") { entered = entered.slice(0,-1); }
+      else { if (entered.length >= 4) return; entered += val; }
+      for (let i=0;i<4;i++) {
+        const d = document.getElementById("bzDot"+i);
+        if (d) d.style.background = i < entered.length ? "var(--blue,#007aff)" : "var(--border,#ddd)";
+      }
+      if (entered.length === 4) {
+        if (entered === BZ_PIN) {
+          sessionStorage.setItem("bz_pin_ok","1");
+          overlay.remove();
+          onSuccess();
+        } else {
+          document.getElementById("bzPinErr").textContent = "❌ Noto'g'ri PIN";
+          setTimeout(() => {
+            entered = "";
+            for (let i=0;i<4;i++){const d=document.getElementById("bzDot"+i);if(d)d.style.background="var(--border,#ddd)";}
+            document.getElementById("bzPinErr").textContent = "";
+          }, 800);
+        }
+      }
+    };
+  }
+
   // Auth tayyor bo'lguncha kutamiz
   function waitForAuth(cb, tries) {
     if (tries === undefined) tries = 0;
@@ -64,6 +115,7 @@ function initFirebase() {
     }
   }
 
+  bzShowPinScreen(function() {
   waitForAuth(function() {
   firebase.auth().signInAnonymously().catch(err => {
     console.warn("Firebase Auth:", err.message);
@@ -72,21 +124,11 @@ function initFirebase() {
   firebase.auth().onAuthStateChanged(user => {
     if (!user) return;
 
-    // Doimiy UID: bir marta saqlangan UID ni ishlatamiz
-    // Bu kompyuter, telefon, brauzer tozalansa ham bir xil qoladi
-    const SAVED_UID_KEY = "bz_device_uid";
-    let deviceUID = localStorage.getItem(SAVED_UID_KEY);
-
-    if (!deviceUID) {
-      // Birinchi ulanish — auth UID ni doimiy saqlaymiz
-      deviceUID = user.uid;
-      localStorage.setItem(SAVED_UID_KEY, deviceUID);
-      console.log("✅ Yangi qurilma UID saqlandi:", deviceUID);
-    } else {
-      console.log("✅ Saqlangan UID ishlatildi:", deviceUID);
-    }
-
-    window.BZ_FB.uid = deviceUID;
+    // DOIMIY UID — bu o'zgarmaydi, hamma qurilmada bir xil
+    const FIXED_UID = "DCkCEAHwWxXKxMhkjvvH7TTXQzl1";
+    localStorage.setItem("bz_device_uid", FIXED_UID);
+    window.BZ_FB.uid = FIXED_UID;
+    console.log("✅ UID:", FIXED_UID);
     window.BZ_FB.connected = true;
 
     // Онлайн/офлайн кузатиш
@@ -102,6 +144,7 @@ function initFirebase() {
     bzPatchFunctions();
   });
   }); // waitForAuth end
+  }); // bzShowPinScreen end
 }
 
 // ─── 5. FIREBASE YO'L HELPER ─────────────────────────────────────────────────
