@@ -708,6 +708,8 @@ function renderHistory() {
       <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм</span></div>
       ${es.map((e,ei)=>{
         const entryId = `hentry-${day}-${ei}`;
+        const histArr = JSON.parse(localStorage.getItem("bz_history")||"[]");
+        const realIdx = histArr.findIndex(h => h === e || (h.fbKey && h.fbKey === e.fbKey) || (h.date === e.date && h.time === e.time && h.market === e.market));
         const cashItemsArr = e.cashItems||[];
         const cardItemsArr = e.cardItems||[];
         const totalItems = cashItemsArr.length + cardItemsArr.length;
