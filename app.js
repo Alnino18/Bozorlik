@@ -1597,7 +1597,12 @@ function updateDashboard() {
                       .reduce((s, e) => s + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0), 0);
 
   // Охирги бозор
-  const last    = h.length ? h[h.length - 1] : null;
+  // Eng so'nggi yozuvni date+time bo'yicha topamiz
+  const last = h.length ? h.reduce((a, b) => {
+    const ka = (a.date || "") + (a.time || "");
+    const kb = (b.date || "") + (b.time || "");
+    return kb > ka ? b : a;
+  }) : null;
   const lastMkt = last ? (last.market || "—") + " " + fmtD(last.date) : "—";
 
   const kwEl   = document.getElementById("dw-kassa");
