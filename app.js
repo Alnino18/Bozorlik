@@ -767,7 +767,10 @@ function updateStats() {
   const totalBal = cashBalance + cardBalance;
   chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < totalBal * 0.2 ? "orange" : "green");
   
-  const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
+  // Progress bar: naqd + karta xarajatini naqd + karta balansiga nisbatan
+  const totalBudget = cashBalance + cardBalance;
+  const totalSpent  = cashTotal + cardTotal;
+  const pct = totalBudget > 0 ? Math.min(totalSpent / totalBudget * 100, 100) : 0;
   const progFill = document.getElementById("progFill");
   if (progFill) {
     progFill.style.width = pct + "%";
