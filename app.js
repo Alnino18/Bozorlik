@@ -289,6 +289,226 @@ async function bzTgReply(token, chatId, text) {
   } catch(e) {}
 }
 
+
+/* ══════════════════════════════════════════
+   📈 TOVAR NARX TARIXI
+   Tovar qo'shilganda narxini ko'rsatadi
+══════════════════════════════════════════ */
+function bzGetLastPrice(itemName) {
+  if (!itemName || itemName.length < 2) return null;
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const name = itemName.trim().toLowerCase();
+
+  // Barcha tarixdan ushbu tovarni qidirish
+  const found = [];
+  h.forEach(entry => {
+    const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
+    allItems.forEach(item => {
+      if (item.name && item.name.toLowerCase().includes(name) && item.unitPrice) {
+        found.push({ date: entry.date, price: item.unitPrice, market: entry.market || "" });
+      }
+    });
+  });
+
+  if (!found.length) return null;
+  // Eng so'nggi
+  found.sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  return found[0];
+}
+
+function bzShowPriceHint(inputEl, nameEl) {
+  // nameEl — tovar nomi input
+  const name = (nameEl ? nameEl.value : inputEl.value || "").trim();
+  if (name.length < 2) { bzRemovePriceHint(inputEl); return; }
+
+  const last = bzGetLastPrice(name);
+  if (!last) { bzRemovePriceHint(inputEl); return; }
+
+  let hint = document.getElementById("bzPriceHint_" + inputEl.id);
+  if (!hint) {
+    hint = document.createElement("div");
+    hint.id = "bzPriceHint_" + inputEl.id;
+    hint.style.cssText = "font-size:.72rem;color:var(--blue);padding:3px 8px;background:var(--blue-bg);border-radius:8px;margin-top:3px;display:inline-block";
+    inputEl.parentNode.insertBefore(hint, inputEl.nextSibling);
+  }
+  hint.textContent = `📅 Oxirgi: ${fmt(last.price)} сўм (${last.date}${last.market ? " · " + last.market : ""})`;
+}
+
+function bzRemovePriceHint(inputEl) {
+  const hint = document.getElementById("bzPriceHint_" + inputEl.id);
+  if (hint) hint.remove();
+}
+
+// Tovar nomi yozilganda narx tarixini ko'rsatish
+function bzAttachPriceHints() {
+  // Naqd tovar nomi
+  const cashNameInp = document.getElementById("itemName");
+  if (cashNameInp && !cashNameInp._bzHintAttached) {
+    cashNameInp._bzHintAttached = true;
+    cashNameInp.addEventListener("input", () => bzShowPriceHint(cashNameInp, cashNameInp));
+    cashNameInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cashNameInp), 2000));
+  }
+  // Karta tovar nomi
+  const cardNameInp = document.getElementById("cardItemName");
+  if (cardNameInp && !cardNameInp._bzHintAttached) {
+    cardNameInp._bzHintAttached = true;
+    cardNameInp.addEventListener("input", () => bzShowPriceHint(cardNameInp, cardNameInp));
+    cardNameInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cardNameInp), 2000));
+  }
+}
+
+/* ══════════════════════════════════════════
+   📊 HAFTALIK/OYLIK HISOBOT — TG ga avtomatik
+══════════════════════════════════════════ */
+let _bzReportTimer = null;
+
+function bzStartReportScheduler() {
+  // Har 1 soatda tekshiramiz
+  if (_bzReportTimer) clearInterval(_bzReportTimer);
+  _bzReportTimer = setInterval(bzCheckReportSchedule, 60 * 60 * 1000);
+  // Sahifa ochilganda ham tekshiramiz
+  bzCheckReportSchedule();
+}
+
+function bzCheckReportSchedule() {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Yakshanba, 1=Dushanba
+  const hour = now.getHours();
+  const dateStr = now.toISOString().slice(0, 10);
+
+  const lastWeekly  = localStorage.getItem("bz_last_weekly_report");
+  const lastMonthly = localStorage.getItem("bz_last_monthly_report");
+
+  // Haftalik: Dushanba kuni soat 9:00 da
+  if (dayOfWeek === 1 && hour >= 9 && lastWeekly !== dateStr) {
+    localStorage.setItem("bz_last_weekly_report", dateStr);
+    bzSendWeeklyReport();
+  }
+
+  // Oylik: Har oyning 1-kuni soat 10:00 da
+  const monthStr = now.toISOString().slice(0, 7);
+  if (now.getDate() === 1 && hour >= 10 && lastMonthly !== monthStr) {
+    localStorage.setItem("bz_last_monthly_report", monthStr);
+    bzSendMonthlyReport();
+  }
+}
+
+async function bzSendWeeklyReport() {
+  const tg = getTG();
+  if (!tg.token || !tg.chatId) return;
+
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const now = new Date();
+  // O'tgan hafta
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const thisWeek = h.filter(e => (e.date || "") >= weekAgo);
+
+  if (!thisWeek.length) return;
+
+  const total = thisWeek.reduce((s, e) => s + (e.cashTotal||0) + (e.cardTotal||0), 0);
+  const count = thisWeek.length;
+
+  // Bozorlar bo'yicha
+  const mkts = {};
+  thisWeek.forEach(e => {
+    const m = e.market || "Boshqa";
+    mkts[m] = (mkts[m] || 0) + (e.cashTotal||0) + (e.cardTotal||0);
+  });
+  const mktLines = Object.entries(mkts)
+    .sort((a,b) => b[1]-a[1])
+    .map(([m,s]) => '  ' + m + ': ' + fmt(s) + ' сўм').join('\n');
+
+  // TOP tovarlar
+  const items = {};
+  thisWeek.forEach(e => {
+    [...(e.cashItems||[]), ...(e.cardItems||[])].forEach(i => {
+      if (!i.name) return;
+      items[i.name] = (items[i.name] || 0) + (i.totalPrice || 0);
+    });
+  });
+  const topItems = Object.entries(items)
+    .sort((a,b) => b[1]-a[1]).slice(0, 5)
+    .map(([n,s]) => '  ' + n + ': ' + fmt(s) + ' сўм').join('\n');
+
+  const text = `📊 *HAFTALIK HISOBOT*
+` +
+    `📅 ${weekAgo} — ${now.toISOString().slice(0,10)}
+
+` +
+    `💰 Jami xarajat: *${fmt(total)} сўм*
+` +
+    `🛒 Bozor soni: *${count} ta*
+` +
+    `📍 Bozorlar:
+${mktLines}
+
+` +
+    `🏆 TOP tovarlar:
+${topItems}`;
+
+  await bzTgReply(tg.token, tg.chatId, text);
+  showToast("📊 Haftalik hisobot yuborildi!");
+}
+
+async function bzSendMonthlyReport() {
+  const tg = getTG();
+  if (!tg.token || !tg.chatId) return;
+
+  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const now = new Date();
+  // O'tgan oy
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+  const thisMonth = h.filter(e => (e.date || "").startsWith(lastMonthStr));
+
+  if (!thisMonth.length) return;
+
+  const total = thisMonth.reduce((s,e) => s + (e.cashTotal||0) + (e.cardTotal||0), 0);
+  const cash  = thisMonth.reduce((s,e) => s + (e.cashTotal||0), 0);
+  const card  = thisMonth.reduce((s,e) => s + (e.cardTotal||0), 0);
+  const count = thisMonth.length;
+  const avg   = Math.round(total / count);
+
+  const items = {};
+  thisMonth.forEach(e => {
+    [...(e.cashItems||[]), ...(e.cardItems||[])].forEach(i => {
+      if (!i.name) return;
+      items[i.name] = (items[i.name] || 0) + (i.totalPrice || 0);
+    });
+  });
+  const topItems = Object.entries(items)
+    .sort((a,b) => b[1]-a[1]).slice(0, 5)
+    .map(([n,s]) => '  ' + n + ': ' + fmt(s) + ' сўм').join('\n');
+
+  const monthNames = ["Yanvar","Fevral","Mart","Aprel","May","Iyun",
+                      "Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+  const mName = monthNames[lastMonth.getMonth()];
+
+  const text = `📅 *${mName.toUpperCase()} OY HISOBOTI*
+
+` +
+    `💰 Jami: *${fmt(total)} сўм*
+` +
+    `💵 Нақд: ${fmt(cash)} сўм
+` +
+    `💳 Карта: ${fmt(card)} сўм
+` +
+    `🛒 Bozor: ${count} ta
+` +
+    `📊 O'rtacha: ${fmt(avg)} сўм
+
+` +
+    `🏆 TOP 5 tovar:
+${topItems}`;
+
+  await bzTgReply(tg.token, tg.chatId, text);
+  showToast("📅 Oylik hisobot yuborildi!");
+}
+
+// Qo'lda hisobot yuborish
+window.bzSendManualWeeklyReport  = bzSendWeeklyReport;
+window.bzSendManualMonthlyReport = bzSendMonthlyReport;
+
 /* ══════════════════════════════════════════
    👆 SWIPE GESTURE — tarix kartasi
    Chapga: o'chirish | O'ngga: tahrirlash
@@ -821,7 +1041,7 @@ function finish() {
   const note = getNote();
 
   let r = `Расход · ${dateStr}\n`;
-  r += `📍 Точка: ${market}\n`;
+  r += `📍 Бозор: ${market}\n`;
   r += `💵 Нақд касса: ${fmt(cashBalance)} сўм\n`;
   r += `💳 Карта: ${fmt(cardBalance)} сўм\n`;
   r += `\n`;
@@ -854,10 +1074,10 @@ function finish() {
     r += `📝 Изоҳ: ${note}\n`;
     r += `\n`;
   }
-  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n\n`;
+  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n`;
   r += `✅ Нақд қолди: ${fmt(balance)} сўм\n`;
   r += `💳 Карта қолди: ${fmt(cardBalance - cardTotal)} сўм`;
-  
+
   saveHistory({ 
     market, cashBalance, cardBalance, cashTotal, cardTotal,
     spent: cashTotal, balance, 
@@ -2200,6 +2420,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Telegram Bot polling
   setTimeout(bzStartTgBot, 3000);
+  // Narx tarixi hint
+  setTimeout(bzAttachPriceHints, 500);
+  // Hisobot scheduler
+  bzStartReportScheduler();
 
 });
 

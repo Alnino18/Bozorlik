@@ -1,4 +1,4 @@
-const CACHE = "bozorlik-v17";
+const CACHE = "bozorlik-v19";
 
 self.addEventListener("install", event => {
   self.skipWaiting();
