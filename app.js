@@ -821,7 +821,7 @@ function finish() {
   const note = getNote();
 
   let r = `Расход · ${dateStr}\n`;
-  r += `📍 Бозор: ${market}\n`;
+  r += `📍 Точка: ${market}\n`;
   r += `💵 Нақд касса: ${fmt(cashBalance)} сўм\n`;
   r += `💳 Карта: ${fmt(cardBalance)} сўм\n`;
   r += `\n`;
@@ -854,10 +854,10 @@ function finish() {
     r += `📝 Изоҳ: ${note}\n`;
     r += `\n`;
   }
-  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n`;
+  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n\n`;
   r += `✅ Нақд қолди: ${fmt(balance)} сўм\n`;
   r += `💳 Карта қолди: ${fmt(cardBalance - cardTotal)} сўм`;
-
+  
   saveHistory({ 
     market, cashBalance, cardBalance, cashTotal, cardTotal,
     spent: cashTotal, balance, 
