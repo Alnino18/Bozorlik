@@ -111,7 +111,7 @@ function bzStartListeners() {
   const histRef = bzRef("history");
   if (histRef) {
     // Avval oxirgi 500 tasini yuklaymiz — tezroq ishlaydi
-    histRef.orderByChild("date").limitToLast(500).on("value", snap => {
+    histRef.limitToLast(500).on("value", snap => {
       const d = snap.val();
       if (!d) return;
       const arr = Object.values(d).sort((a, b) => {
@@ -172,14 +172,26 @@ function bzStartListeners() {
   if (settRef) {
     settRef.on("value", snap => {
       const d = snap.val();
-      if (!d) return;
-      if (d.tg_token) localStorage.setItem("bz_tg_token", d.tg_token);
-      if (d.tg_chat)  localStorage.setItem("bz_tg_chat",  d.tg_chat);
-      if (d.dark !== undefined) {
+
+      // Default TG sozlamalari — Firebase bo'sh bo'lsa ham ishlaydi
+      const TG_TOKEN = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M";
+      const TG_CHAT  = "483325961";
+
+      const token = (d && d.tg_token) ? d.tg_token : TG_TOKEN;
+      const chat  = (d && d.tg_chat)  ? d.tg_chat  : TG_CHAT;
+
+      localStorage.setItem("bz_tg_token", token);
+      localStorage.setItem("bz_tg_chat",  chat);
+
+      // Firebase ga ham saqlaymiz (bir marta)
+      if (!d || !d.tg_token) {
+        bzSaveSettings({ tg_token: TG_TOKEN, tg_chat: TG_CHAT });
+      }
+
+      if (d && d.dark !== undefined) {
         localStorage.setItem("bz_dark", d.dark ? "1" : "0");
       }
       if (typeof updateTgPill === "function") updateTgPill();
-      if (typeof updateGsPill === "function") updateGsPill();
     });
   }
 }
