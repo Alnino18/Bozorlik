@@ -82,7 +82,7 @@
     <div class="card">
       <p class="card-title">📍 Бозорни танланг</p>
       <div class="market-grid">
-        <button class="market-btn" onclick="selectMarket(this,'Куйлик')">
+        <button class="market-btn" onclick="selectMarket(this,'Куйлик')" onlongpress="bzSaveMarketGeo('Куйлик')">
           <span class="mb-icon">🏪</span>
           <span class="mb-name">Куйлик</span>
         </button>
@@ -162,6 +162,9 @@
     <!-- ТЕЗ ҚЎШИШ (QUICK ADD) - НАҚД -->
     <div class="quick-add-bar">
       <button class="qa-mic-btn" id="micBtn" onclick="toggleVoice()" title="Овозли киритиш">🎤</button>
+      <div style="display:flex;gap:6px;align-items:center">
+      <button onclick="bzOpenCameraAI()" title="Kamera bilan tovar qo'shish"
+        style="width:42px;height:42px;border-radius:var(--radius-xs);border:none;background:var(--purple-bg);color:var(--purple);font-size:1.2rem;cursor:pointer;flex-shrink:0">📸</button>
       <input id="cashInp" class="field qa-inp" placeholder="Мош 10кг (15000) 150000"
              onkeydown="if(event.key==='Enter')addCash()"/>
       <button class="add-btn" onclick="addTemplate()" style="background:var(--orange)" title="Шаблонга сақлаш">📌</button>

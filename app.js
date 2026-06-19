@@ -290,6 +290,297 @@ async function bzTgReply(token, chatId, text) {
 }
 
 
+
+/* ══════════════════════════════════════════
+   📍 GPS BOZOR REJIMI
+   Bozorga yaqinlashganda avtomatik tanlaydi
+══════════════════════════════════════════ */
+
+// Bozor koordinatalari — o'zingizning bozorlaringizni qo'shing
+const BZ_MARKETS_GEO = [
+  { name: "Куйлик",   lat: 41.3285, lng: 69.3575, radius: 500 },
+  { name: "Фут Сити", lat: 41.2995, lng: 69.2401, radius: 400 },
+  { name: "Эко",      lat: 41.3123, lng: 69.2789, radius: 300 },
+];
+
+let _bzGpsWatcher = null;
+let _bzLastGpsMarket = null;
+
+function bzStartGps() {
+  if (!navigator.geolocation) return;
+
+  _bzGpsWatcher = navigator.geolocation.watchPosition(
+    bzOnGpsUpdate,
+    () => {}, // xatoni jimgina o'tkazib yuboramiz
+    { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+  );
+}
+
+function bzStopGps() {
+  if (_bzGpsWatcher !== null) {
+    navigator.geolocation.clearWatch(_bzGpsWatcher);
+    _bzGpsWatcher = null;
+  }
+}
+
+function bzOnGpsUpdate(pos) {
+  const { latitude: lat, longitude: lng } = pos.coords;
+
+  let closestMarket = null;
+  let closestDist = Infinity;
+
+  BZ_MARKETS_GEO.forEach(m => {
+    const dist = bzCalcDistance(lat, lng, m.lat, m.lng);
+    if (dist < m.radius && dist < closestDist) {
+      closestDist = dist;
+      closestMarket = m;
+    }
+  });
+
+  if (closestMarket && closestMarket.name !== _bzLastGpsMarket) {
+    _bzLastGpsMarket = closestMarket.name;
+    bzAutoSelectMarket(closestMarket.name);
+    bzHaptic("success");
+    showToast("📍 " + closestMarket.name + " — avtomatik tanlandi!");
+  } else if (!closestMarket && _bzLastGpsMarket) {
+    _bzLastGpsMarket = null;
+  }
+}
+
+function bzCalcDistance(lat1, lng1, lat2, lng2) {
+  // Haversine formula — metrda
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function bzAutoSelectMarket(name) {
+  const btn = Array.from(document.querySelectorAll(".market-btn"))
+    .find(b => b.querySelector(".mb-name")?.textContent.trim() === name);
+  if (btn) {
+    selectMarket(btn, name);
+    // Zakupka tabiga o'tamiz
+    // GPS: zakupka tabiga o'tish
+  }
+}
+
+// GPS sozlamasi — koordinatlarni saqlash
+window.bzSaveMarketGeo = function(marketName) {
+  if (!navigator.geolocation) { showToast("GPS yo'q"); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const saved = JSON.parse(localStorage.getItem("bz_market_geo") || "{}");
+    saved[marketName] = { lat: pos.coords.latitude, lng: pos.coords.longitude, radius: 300 };
+    localStorage.setItem("bz_market_geo", JSON.stringify(saved));
+    showToast("📍 " + marketName + " joylashuvi saqlandi!");
+    // BZ_MARKETS_GEO ni yangilash
+    const idx = BZ_MARKETS_GEO.findIndex(m => m.name === marketName);
+    if (idx >= 0) {
+      BZ_MARKETS_GEO[idx].lat = pos.coords.latitude;
+      BZ_MARKETS_GEO[idx].lng = pos.coords.longitude;
+    } else {
+      BZ_MARKETS_GEO.push({ name: marketName, lat: pos.coords.latitude, lng: pos.coords.longitude, radius: 300 });
+    }
+  }, () => showToast("GPS xato"));
+};
+
+// Saqlangan koordinatlarni yuklash
+function bzLoadMarketGeo() {
+  const saved = JSON.parse(localStorage.getItem("bz_market_geo") || "{}");
+  Object.entries(saved).forEach(([name, geo]) => {
+    const idx = BZ_MARKETS_GEO.findIndex(m => m.name === name);
+    if (idx >= 0) {
+      BZ_MARKETS_GEO[idx].lat = geo.lat;
+      BZ_MARKETS_GEO[idx].lng = geo.lng;
+      BZ_MARKETS_GEO[idx].radius = geo.radius || 300;
+    } else {
+      BZ_MARKETS_GEO.push({ name, ...geo, radius: geo.radius || 300 });
+    }
+  });
+}
+
+/* ══════════════════════════════════════════
+   📸 KAMERA + AI — TOVAR NARXINI TAXMIN QILISH
+   Tovarni ko'rsating — AI narxni aniqlaydi
+══════════════════════════════════════════ */
+
+function bzOpenCameraAI() {
+  let existing = document.getElementById("bzCameraModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "bzCameraModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9990;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px";
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:20px;padding:18px;width:100%;max-width:420px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <p style="font-weight:700;font-size:1rem;margin:0">📸 Tovarni surating</p>
+        <button onclick="document.getElementById('bzCameraModal').remove()" 
+          style="border:none;background:var(--bg);border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem">✕</button>
+      </div>
+      
+      <video id="bzCamVideo" autoplay playsinline muted
+        style="width:100%;border-radius:12px;background:#000;max-height:280px;object-fit:cover"></video>
+      
+      <canvas id="bzCamCanvas" style="display:none"></canvas>
+      
+      <div id="bzCamResult" style="margin-top:12px;min-height:60px;display:none;background:var(--bg);border-radius:12px;padding:12px">
+        <div id="bzCamResultText" style="font-size:.85rem;color:var(--text)"></div>
+        <div id="bzCamResultBtns" style="margin-top:10px;display:flex;gap:8px"></div>
+      </div>
+      
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button onclick="bzCamCapture()" id="bzCamBtn"
+          style="flex:1;padding:13px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-weight:700;cursor:pointer;font-size:.95rem;font-family:inherit">
+          📸 Suratga ol
+        </button>
+        <label style="flex:1;padding:13px;border-radius:12px;border:none;background:var(--bg);color:var(--text);font-weight:700;cursor:pointer;font-size:.95rem;text-align:center;display:flex;align-items:center;justify-content:center">
+          🖼️ Galereya
+          <input type="file" accept="image/*" onchange="bzCamFromFile(this)" style="display:none"/>
+        </label>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) { bzStopCamera(); modal.remove(); } });
+
+  bzStartCamera();
+}
+
+let _bzStream = null;
+
+async function bzStartCamera() {
+  try {
+    _bzStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById("bzCamVideo");
+    if (video) video.srcObject = _bzStream;
+  } catch(e) {
+    showToast("📷 Kameraga ruxsat bering");
+  }
+}
+
+function bzStopCamera() {
+  if (_bzStream) {
+    _bzStream.getTracks().forEach(t => t.stop());
+    _bzStream = null;
+  }
+}
+
+function bzCamCapture() {
+  const video = document.getElementById("bzCamVideo");
+  const canvas = document.getElementById("bzCamCanvas");
+  if (!video || !canvas) return;
+
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+
+  const base64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+  bzStopCamera();
+  bzAnalyzeImage(base64);
+}
+
+function bzCamFromFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const base64 = e.target.result.split(",")[1];
+    bzStopCamera();
+    bzAnalyzeImage(base64);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function bzAnalyzeImage(base64) {
+  const resultDiv  = document.getElementById("bzCamResult");
+  const resultText = document.getElementById("bzCamResultText");
+  const resultBtns = document.getElementById("bzCamResultBtns");
+
+  if (!resultDiv || !resultText) return;
+
+  resultDiv.style.display = "block";
+  resultText.innerHTML = "<span style='color:var(--blue)'>🤖 AI tahlil qilyapti...</span>";
+  resultBtns.innerHTML = "";
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: base64 }
+            },
+            {
+              type: "text",
+              text: "Bu rasmda nima ko'rinyapti? Agar bu oziq-ovqat yoki bozor mahsuloti bo'lsa, O'zbekistondagi taxminiy narxini so'mda ayt. JSON formatida javob ber: {tovar: nom, narx: 50000, izoh: izoh}. Agar mahsulot ko'rinmasa: {tovar: null, narx: null, izoh: izoh}."
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const text = data.content?.[0]?.text || "";
+
+    let parsed = null;
+    try {
+      const jsonMatch = text.match(/\{[^}]+\}/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch(e) {}
+
+    if (parsed && parsed.tovar) {
+      resultText.innerHTML = 
+        "<b>" + parsed.tovar + "</b><br>" +
+        (parsed.narx ? "💰 Taxminiy narx: <b>" + fmt(parsed.narx) + " сўм</b><br>" : "") +
+        "<span style='font-size:.75rem;color:var(--text2)'>" + (parsed.izoh || "") + "</span>";
+
+      // Cashga qo'shish tugmasi
+      if (parsed.tovar && parsed.narx) {
+        resultBtns.innerHTML = `
+          <button onclick="bzCamAddItem('${parsed.tovar.replace(/'/g,"\\'")}', ${parsed.narx}, 'cash')"
+            style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:.82rem">
+            💰 Нақдга қўш
+          </button>
+          <button onclick="bzCamAddItem('${parsed.tovar.replace(/'/g,"\\'")}', ${parsed.narx}, 'card')"
+            style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--purple-bg);color:var(--purple);font-weight:600;cursor:pointer;font-family:inherit;font-size:.82rem">
+            💳 Картага қўш
+          </button>
+        `;
+      }
+    } else {
+      resultText.innerHTML = "<span style='color:var(--text2)'>" + (parsed?.izoh || "Mahsulot aniqlanmadi") + "</span>";
+    }
+  } catch(e) {
+    resultText.innerHTML = "<span style='color:var(--red)'>❌ AI xato: " + e.message + "</span>";
+  }
+}
+
+function bzCamAddItem(name, price, type) {
+  const inp = document.getElementById(type === "cash" ? "cashInp" : "cardInp");
+  if (inp) {
+    inp.value = name + " " + price;
+    // addItem funksiyasini chaqiramiz
+    if (type === "cash" && typeof addCashItem === "function") addCashItem();
+    else if (type === "card" && typeof addCardItem === "function") addCardItem();
+    else inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  }
+  document.getElementById("bzCameraModal")?.remove();
+  showToast("✅ " + name + " qo'shildi!");
+  bzHaptic("success");
+}
+
 /* ══════════════════════════════════════════
    📈 TOVAR NARX TARIXI
    Tovar qo'shilganda narxini ko'rsatadi
@@ -2420,6 +2711,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Telegram Bot polling
   setTimeout(bzStartTgBot, 3000);
+  // GPS bozor rejimi
+  bzLoadMarketGeo();
+  bzStartGps();
   // Narx tarixi hint
   setTimeout(bzAttachPriceHints, 500);
   // Hisobot scheduler
