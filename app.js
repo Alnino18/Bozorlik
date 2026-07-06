@@ -1342,6 +1342,27 @@ function updateStats() {
 }
 
 /* ── FINISH ── */
+function buildDebtSectionText(market, date) {
+  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]")
+    .filter(d => d.date === date && d.market === market)
+    .sort((a,b) => (a.id||0) - (b.id||0));
+
+  if (!debts.length) {
+    return `\n\nКарзга товар олинмади`;
+  }
+
+  let s = `\n\nКарздорлик:\n`;
+  debts.forEach(d => {
+    s += `• ${d.name}`;
+    if (d.kg) s += ` ${d.kg}кг`;
+    if (d.unitPrice) s += ` (${fmt(d.unitPrice)})`;
+    s += ` — ${fmt(d.totalPrice)} сўм\n`;
+  });
+  const debtTotal = debts.reduce((sum,d) => sum + d.totalPrice, 0);
+  s += `Жами қарз: ${fmt(debtTotal)} сўм`;
+  return s;
+}
+
 function finish() {
   bzHaptic("success");
   if (!cashItems.length && !cardItems.length) { 
@@ -1388,6 +1409,7 @@ function finish() {
   }
   r += `💰 Умумий: ${fmt(totalSpent)} сўм\n`;
   r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
+  r += buildDebtSectionText(market, today());
 
   saveHistory({ 
     market, cashBalance, cardBalance, cashTotal, cardTotal,
@@ -1809,6 +1831,7 @@ function buildEntryReport(e) {
   if (e.note) r += `📝 Изоҳ: ${e.note}\n\n`;
   r += `💰 Умумий: ${fmt(totalSpent)} сўм\n`;
   r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
+  r += buildDebtSectionText(e.market||"", e.date||"");
   return r;
 }
 
