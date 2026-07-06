@@ -1269,11 +1269,11 @@ function buildDebtSummaryReport() {
   const dateStr = new Date().toLocaleDateString("ru-RU", {day:"2-digit", month:"2-digit", year:"numeric"});
 
   let r = `${dateStr}.\n`;
-  r += `бугунги Расход - ${fmt(spendToday)}\n`;
+  r += ` Расход - ${fmt(spendToday)}\n`;
   r += ` Колди - ${fmt(remain)} \n\n`;
-  r += `бугунги Карздорлик - ${fmt(debtToday)} \n`;
-  r += `Эски Карз - ${fmt(debtOld)} \n\n`;
-  r += `Общий - ${fmt(debtToday + debtOld)}`;
+  r += ` Карз - ${fmt(debtToday)} \n`;
+  r += `Эски карз - ${fmt(debtOld)} \n\n`;
+  r += `Общий карз - ${fmt(debtToday + debtOld)}`;
   return r;
 }
 
@@ -1351,7 +1351,7 @@ function buildDebtSectionText(market, date) {
     return `\n\nКарзга товар олинмади`;
   }
 
-  let s = `\n\nКарздорлик:\n`;
+  let s = `\n\nКарзга товар:\n`;
   debts.forEach(d => {
     s += `• ${d.name}`;
     if (d.kg) s += ` ${d.kg}кг`;
@@ -1407,7 +1407,7 @@ function finish() {
     r += `📝 Изоҳ: ${note}\n`;
     r += `\n`;
   }
-  r += `💰 Умумий: ${fmt(totalSpent)} сўм\n`;
+  r += `💰 Обший: ${fmt(totalSpent)} сўм\n`;
   r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
   r += buildDebtSectionText(market, today());
 
