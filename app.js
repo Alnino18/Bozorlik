@@ -76,6 +76,7 @@ function addToCardBalance() {
 /* ── STATE ── */
 let cashItems = [];
 let cardItems = [];
+let itemSeq = 0;
 let period    = "week";
 let barInst   = null;
 let pieInst   = null;
@@ -998,6 +999,7 @@ function addCash() {
   const p = parse(t);
   if (!p) { showToast("⚠️ Формат: Мош 10кг (15000) 150000"); return; }
   
+  p.seq = itemSeq++;
   cashItems.push(p);
   inp.value = "";
   inp.focus();
@@ -1048,6 +1050,7 @@ function addCard() {
   const p = parse(t);
   if (!p) { showToast("⚠️ Формат: Гўшт 200000"); return; }
   
+  p.seq = itemSeq++;
   cardItems.push(p);
   inp.value = "";
   inp.focus();
@@ -1251,6 +1254,36 @@ function updateAllDebtSelectAll() {
   }
 }
 
+function buildDebtSummaryReport() {
+  const t = today();
+  const hist = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const spendToday = hist.filter(e => e.date === t)
+    .reduce((s,e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
+
+  const remain = getCashBalance() + getCardBalance();
+
+  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+  const debtToday = debts.filter(d => d.date === t).reduce((s,d) => s + d.totalPrice, 0);
+  const debtOld   = debts.filter(d => d.date !== t).reduce((s,d) => s + d.totalPrice, 0);
+
+  const dateStr = new Date().toLocaleDateString("ru-RU", {day:"2-digit", month:"2-digit", year:"numeric"});
+
+  let r = `${dateStr}.\n`;
+  r += `бугунги Расход - ${fmt(spendToday)}\n`;
+  r += ` Колди - ${fmt(remain)} \n\n`;
+  r += `бугунги Карздорлик - ${fmt(debtToday)} \n`;
+  r += `Эски Карз - ${fmt(debtOld)} \n\n`;
+  r += `Общий - ${fmt(debtToday + debtOld)}`;
+  return r;
+}
+
+function sendDebtSummary() {
+  const cfg = getTG();
+  if (!cfg.token || !cfg.chatId) { showToast("⚠️ TG уланмаган"); return; }
+  const r = buildDebtSummaryReport();
+  sendTG(r);
+}
+
 function clearAllDebts() {
   if(!confirm("БАРЧА қарзлар ўчирилсинми? Бу амални қайтариб бўлмайди!")) return;
   const deletedDebts = [...allDebtsArray];
@@ -1316,7 +1349,7 @@ function finish() {
     return; 
   }
   if (!selectedMarket) { 
-    showToast("⚠️ Бозорни танланг!"); 
+    showToast("⚠️ Точкани танланг!"); 
     return; 
   }
   
@@ -1331,43 +1364,30 @@ function finish() {
   const timeStr = now.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   const note = getNote();
 
+  const totalBalance = cashBalance + cardBalance;
+  const totalSpent   = cashTotal + cardTotal;
+  const totalRemain  = totalBalance - totalSpent;
+
   let r = `Расход · ${dateStr}\n`;
-  r += `📍 Бозор: ${market}\n`;
-  r += `💵 Нақд касса: ${fmt(cashBalance)} сўм\n`;
-  r += `💳 Карта: ${fmt(cardBalance)} сўм\n`;
+  r += `📍 Точка: ${market}\n`;
+  r += `💰 Касса: ${fmt(totalBalance)} сўм\n`;
   r += `\n`;
 
-  if (cashItems.length) {
-    r += `💰 Нақд товарлар:\n`;
-    cashItems.forEach(it => { 
-      r += `• ${it.name}`; 
-      if (it.kg) r += ` ${it.kg}кг`; 
-      if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
-      r += ` — ${fmt(it.totalPrice)} сўм\n`; 
-    });
-    r += `💰 Нақд жами: ${fmt(cashTotal)} сўм\n`;
-    r += `\n`;
-  }
-
-  if (cardItems.length) {
-    r += `💳 Карта товарлар:\n`;
-    cardItems.forEach(it => { 
-      r += `• ${it.name}`; 
-      if (it.kg) r += ` ${it.kg}кг`; 
-      if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
-      r += ` — ${fmt(it.totalPrice)} сўм\n`; 
-    });
-    r += `💳 Карта жами: ${fmt(cardTotal)} сўм\n`;
-    r += `\n`;
-  }
+  const allItems = [...cashItems, ...cardItems].sort((a,b) => (a.seq||0) - (b.seq||0));
+  allItems.forEach(it => { 
+    r += `• ${it.name}`; 
+    if (it.kg) r += ` ${it.kg}кг`; 
+    if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
+    r += ` — ${fmt(it.totalPrice)} сўм\n`; 
+  });
+  r += `\n`;
 
   if (note) {
     r += `📝 Изоҳ: ${note}\n`;
     r += `\n`;
   }
-  r += `💰 Умумий: ${fmt(cashTotal + cardTotal)} сўм\n`;
-  r += `✅ Нақд қолди: ${fmt(balance)} сўм\n`;
-  r += `💳 Карта қолди: ${fmt(cardBalance - cardTotal)} сўм`;
+  r += `💰 Умумий: ${fmt(totalSpent)} сўм\n`;
+  r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
 
   saveHistory({ 
     market, cashBalance, cardBalance, cashTotal, cardTotal,
@@ -1468,7 +1488,7 @@ function renderHistory() {
   const mon = document.getElementById("histMonth").value;
   const selMkt = window._histMktFilter || "";
 
-  // Бозор фильтр тугмалари
+  // Точка фильтр тугмалари
   const allMkts = [...new Set(h.map(e=>e.market).filter(Boolean))];
   const mf = document.getElementById("histMarketFilter");
   if (mf) {
@@ -1579,7 +1599,7 @@ function renderHistory() {
           <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
             ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
             <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
-            <button onclick="editHistMarket('${day}',${ei})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Бозор</button>
+            <button onclick="editHistMarket('${day}',${ei})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Точка</button>
             <button onclick="editHistEntry(${realIdx})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--green-bg);color:var(--green);font-family:inherit">✏️ Таҳрир</button>
           </div>
           ${totalItems?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${cashHtml}${cardHtml}</div>`:""}
@@ -1623,7 +1643,7 @@ function editHistMarket(day, idx) {
   modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center";
   modal.innerHTML = `
     <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:70vh;overflow-y:auto">
-      <p style="font-weight:700;font-size:1rem;margin:0 0 4px">✏️ Бозорни ўзгартириш</p>
+      <p style="font-weight:700;font-size:1rem;margin:0 0 4px">✏️ Точкани ўзгартириш</p>
       <p style="color:var(--text2);font-size:.8rem;margin:0 0 14px">Ҳозирги: <b style="color:var(--orange)">${esc(e.market)}</b> · ${e.date}</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
         ${markets.map(m => `
@@ -1646,7 +1666,7 @@ function editHistMarket(day, idx) {
 
 function confirmEditMarket(idx, newMarket, btn) {
   newMarket = (newMarket || "").trim();
-  if (!newMarket) { showToast("⚠️ Бозор номини киритинг"); return; }
+  if (!newMarket) { showToast("⚠️ Точка номини киритинг"); return; }
   const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
   if (!h[idx]) return;
   const old = h[idx].market;
@@ -1769,26 +1789,26 @@ function saveHistEntry(idx) {
 
 
 function buildEntryReport(e) {
-  const items = e.cashItems||[];
-  const cItems = e.cardItems||[];
+  const cashBalance = e.cashBalance??e.kassa??0;
+  const cardBalance = e.cardBalance||0;
+  const cashTotal    = e.cashTotal||e.spent||0;
+  const cardTotal    = e.cardTotal||0;
+  const totalBalance = cashBalance + cardBalance;
+  const totalSpent   = cashTotal + cardTotal;
+  const totalRemain  = e.balance!=null ? (e.balance + (cardBalance - cardTotal)) : (totalBalance - totalSpent);
+
   let r = `Расход · ${e.date||""}\n`;
-  r += `📍 Бозор: ${e.market||""}\n`;
-  r += `💵 Нақд касса: ${fmt(e.cashBalance??e.kassa??0)} сўм\n`;
-  if (e.cardBalance) r += `💳 Карта: ${fmt(e.cardBalance)} сўм\n`;
+  r += `📍 Точка: ${e.market||""}\n`;
+  r += `💰 Касса: ${fmt(totalBalance)} сўм\n`;
   r += `\n`;
-  if (items.length) {
-    r += `💰 Нақд товарлар:\n`;
-    items.forEach(i=>{ r+=`• ${i.name}`; if(i.kg) r+=` ${i.kg}кг`; if(i.unitPrice) r+=` (${fmt(i.unitPrice)})`; r+=` — ${fmt(i.totalPrice)} сўм\n`; });
-    r += `💰 Нақд жами: ${fmt(e.cashTotal||e.spent||0)} сўм\n\n`;
-  }
-  if (cItems.length) {
-    r += `💳 Карта товарлар:\n`;
-    cItems.forEach(i=>{ r+=`• ${i.name}`; if(i.kg) r+=` ${i.kg}кг`; if(i.unitPrice) r+=` (${fmt(i.unitPrice)})`; r+=` — ${fmt(i.totalPrice)} сўм\n`; });
-    r += `💳 Карта жами: ${fmt(e.cardTotal||0)} сўм\n\n`;
-  }
+
+  const allItems = [...(e.cashItems||[]), ...(e.cardItems||[])].sort((a,b) => (a.seq||0) - (b.seq||0));
+  allItems.forEach(i=>{ r+=`• ${i.name}`; if(i.kg) r+=` ${i.kg}кг`; if(i.unitPrice) r+=` (${fmt(i.unitPrice)})`; r+=` — ${fmt(i.totalPrice)} сўм\n`; });
+  r += `\n`;
+
   if (e.note) r += `📝 Изоҳ: ${e.note}\n\n`;
-  r += `💰 Умумий: ${fmt((e.cashTotal||e.spent||0)+(e.cardTotal||0))} сўм\n`;
-  r += `✅ Нақд қолди: ${fmt(e.balance??e.remain??0)} сўм`;
+  r += `💰 Умумий: ${fmt(totalSpent)} сўм\n`;
+  r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
   return r;
 }
 
@@ -2049,7 +2069,7 @@ function exportCSV() {
 
   let csv = "\uFEFF";
   csv += "ЗАКУПКА ТАРИХИ\n";
-  csv += "Сана,Вақт,Бозор,Нақд касса,Нақд харажат,Карта харажат,Қолдиқ,Товарлар,Изоҳ\n";
+  csv += "Сана,Вақт,Точка,Нақд касса,Нақд харажат,Карта харажат,Қолдиқ,Товарлар,Изоҳ\n";
   h.forEach(e => {
     const cashItemsStr = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [нақд]").join(" | ");
     const cardItemsStr = (e.cardItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [карта]").join(" | ");
@@ -2058,7 +2078,7 @@ function exportCSV() {
   });
 
   csv += "\nҚАРЗЛАР\n";
-  csv += "Сана,Ким,Бозор,Товар,кг,Нарх,Жами (сўм)\n";
+  csv += "Сана,Ким,Точка,Товар,кг,Нарх,Жами (сўм)\n";
   debts.forEach(d => {
     csv += [d.date, d.who || "", d.market || "", d.name, d.kg || "", d.unitPrice || "", d.totalPrice].join(",") + "\n";
   });
