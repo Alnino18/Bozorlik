@@ -1000,6 +1000,7 @@ function addCash() {
   if (!p) { showToast("⚠️ Формат: Мош 10кг (15000) 150000"); return; }
   
   p.seq = itemSeq++;
+  p.market = getMarket();
   cashItems.push(p);
   inp.value = "";
   inp.focus();
@@ -1051,6 +1052,7 @@ function addCard() {
   if (!p) { showToast("⚠️ Формат: Гўшт 200000"); return; }
   
   p.seq = itemSeq++;
+  p.market = getMarket();
   cardItems.push(p);
   inp.value = "";
   inp.focus();
@@ -1374,34 +1376,51 @@ function finish() {
     return; 
   }
   
-  const market = getMarket();
-  const cashBalance = getCashBalance();
-  const cardBalance = getCardBalance();
-  const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const cardTotal = cardItems.reduce((s,it) => s + it.totalPrice, 0);
-  const balance = cashBalance - cashTotal;
+  const currentMarket = getMarket();
+  const cashBalanceStart = getCashBalance();
+  const cardBalanceStart = getCardBalance();
   const now = new Date();
   const dateStr = now.toLocaleDateString("ru-RU", {day: "2-digit", month: "2-digit", year: "numeric"});
   const timeStr = now.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   const note = getNote();
 
-  const totalBalance = cashBalance + cardBalance;
-  const totalSpent   = cashTotal + cardTotal;
-  const totalRemain  = totalBalance - totalSpent;
+  // Eski (market belgisi yo'q) tovarlarni joriy bozorga bog'laymiz
+  cashItems.forEach(it => { if (!it.market) it.market = currentMarket; });
+  cardItems.forEach(it => { if (!it.market) it.market = currentMarket; });
+
+  // Tovarlarni bozorlar bo'yicha guruhlaymiz (birinchi qo'shilgan tartibda)
+  const marketOrder = [];
+  const groups = {};
+  [...cashItems, ...cardItems].forEach(it => {
+    if (!groups[it.market]) { groups[it.market] = { cash: [], card: [] }; marketOrder.push(it.market); }
+  });
+  cashItems.forEach(it => groups[it.market].cash.push(it));
+  cardItems.forEach(it => groups[it.market].card.push(it));
+
+  const cashTotal   = cashItems.reduce((s,it) => s + it.totalPrice, 0);
+  const cardTotal   = cardItems.reduce((s,it) => s + it.totalPrice, 0);
+  const totalBalance = cashBalanceStart + cardBalanceStart;
+  const totalSpent    = cashTotal + cardTotal;
+  const totalRemain   = totalBalance - totalSpent;
 
   let r = `Расход · ${dateStr}\n`;
-  r += `📍 Точка: ${market}\n`;
   r += `💰 Касса: ${fmt(totalBalance)} сўм\n`;
   r += `\n`;
 
-  const allItems = [...cashItems, ...cardItems].sort((a,b) => (a.seq||0) - (b.seq||0));
-  allItems.forEach(it => { 
-    r += `• ${it.name}`; 
-    if (it.kg) r += ` ${it.kg}кг`; 
-    if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`; 
-    r += ` — ${fmt(it.totalPrice)} сўм\n`; 
+  marketOrder.forEach(m => {
+    const g = groups[m];
+    const items = [...g.cash, ...g.card].sort((a,b) => (a.seq||0) - (b.seq||0));
+    const mTotal = g.cash.reduce((s,it)=>s+it.totalPrice,0) + g.card.reduce((s,it)=>s+it.totalPrice,0);
+    r += `📍 ${m}\n`;
+    items.forEach(it => {
+      r += `• ${it.name}`;
+      if (it.kg) r += ` ${it.kg}кг`;
+      if (it.unitPrice) r += ` (${fmt(it.unitPrice)})`;
+      r += ` — ${fmt(it.totalPrice)} сўм\n`;
+    });
+    r += `Расход: ${fmt(mTotal)} сўм\n`;
+    r += `\n`;
   });
-  r += `\n`;
 
   if (note) {
     r += `📝 Изоҳ: ${note}\n`;
@@ -1409,38 +1428,45 @@ function finish() {
   }
   r += `💰 Обший: ${fmt(totalSpent)} сўм\n`;
   r += `✅ Қолди: ${fmt(totalRemain)} сўм`;
-  r += buildDebtSectionText(market, today());
+  if (marketOrder.length === 1) {
+    r += buildDebtSectionText(marketOrder[0], today());
+  } else {
+    marketOrder.forEach(m => {
+      const debtText = buildDebtSectionText(m, today())
+        .replace("Карзга товар олинмади", `${m}: карзга товар олинмади`)
+        .replace("Карзга товар:", `${m} — карзга товар:`);
+      r += debtText;
+    });
+  }
 
-  saveHistory({ 
-    market, cashBalance, cardBalance, cashTotal, cardTotal,
-    spent: cashTotal, balance, 
-    cashItems: [...cashItems], cardItems: [...cardItems],
-    date: today(), time: timeStr, note 
+  // Har bir bozor uchun alohida tarix yozuvi (statistikalar to'g'ri hisoblanishi uchun)
+  let runningCash = cashBalanceStart;
+  let runningCard = cardBalanceStart;
+  marketOrder.forEach(m => {
+    const g = groups[m];
+    const mCashTotal = g.cash.reduce((s,it)=>s+it.totalPrice,0);
+    const mCardTotal = g.card.reduce((s,it)=>s+it.totalPrice,0);
+    const entryCashBalance = runningCash;
+    const entryCardBalance = runningCard;
+    runningCash -= mCashTotal;
+    runningCard -= mCardTotal;
+
+    saveHistory({
+      market: m, cashBalance: entryCashBalance, cardBalance: entryCardBalance,
+      cashTotal: mCashTotal, cardTotal: mCardTotal,
+      spent: mCashTotal, balance: runningCash,
+      cashItems: [...g.cash], cardItems: [...g.card],
+      date: today(), time: timeStr, note
+    });
+
+    lastReceiptData = { market: m, cashBalance: entryCashBalance, cardBalance: entryCardBalance, cashTotal: mCashTotal, cardTotal: mCardTotal, balance: runningCash, cashItems: [...g.cash], cardItems: [...g.card], date: today(), time: timeStr, note };
   });
 
-  lastReceiptData = { market, cashBalance, cardBalance, cashTotal, cardTotal, balance, cashItems: [...cashItems], cardItems: [...cardItems], date: today(), time: timeStr, note };
   const receiptBtn = document.getElementById("receiptBtn");
   if (receiptBtn) receiptBtn.style.display = "";
 
-  const gsData = {
-    type: "purchase",
-    date: today(),
-    time: timeStr,
-    market,
-    cashBalance,
-    cardBalance,
-    cashTotal,
-    cardTotal,
-    balance,
-    note,
-    items: [
-      ...cashItems.map(it => ({ name: it.name, kg: it.kg || "", unitPrice: it.unitPrice || "", totalPrice: it.totalPrice, payType: "нақд" })),
-      ...cardItems.map(it => ({ name: it.name, kg: it.kg || "", unitPrice: it.unitPrice || "", totalPrice: it.totalPrice, payType: "карта" }))
-    ]
-  };
-
-  setCashBalance(balance);
-  setCardBalance(cardBalance - cardTotal);
+  setCashBalance(runningCash);
+  setCardBalance(runningCard);
 
   const pre = document.getElementById("report");
   if (pre) {
