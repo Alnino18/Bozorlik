@@ -3014,8 +3014,8 @@ async function bzProcessAiAgent(query) {
   const q = query.toLowerCase().trim();
   const hist = safeGetJSON("bz_history", []);
   const debts = safeGetJSON("bz_debts", []);
-  const cashBal = getCashBalance();
-  const cardBal = getCardBal ? getCardBalance() : 0;
+  const cashBal = typeof getCashBalance === "function" ? getCashBalance() : 0;
+  const cardBal = typeof getCardBalance === "function" ? getCardBalance() : 0;
   const t = today();
 
   // 1. BUYRUQ: Naqdga tovar qo'shish
