@@ -618,16 +618,12 @@ async function bzAnalyzeImage(base64) {
         (parsed.narx ? "💰 Taxminiy narx: <b>" + fmt(parsed.narx) + " сўм</b><br>" : "") +
         "<span style='font-size:.75rem;color:var(--text2)'>" + (parsed.izoh || "") + "</span>";
 
-      // Cashga qo'shish tugmasi
+      // Tovar qo'shish tugmasi
       if (parsed.tovar && parsed.narx) {
         resultBtns.innerHTML = `
           <button onclick="bzCamAddItem('${parsed.tovar.replace(/'/g,"\\'")}', ${parsed.narx}, 'cash')"
-            style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:.82rem">
-            💰 Нақдга қўш
-          </button>
-          <button onclick="bzCamAddItem('${parsed.tovar.replace(/'/g,"\\'")}', ${parsed.narx}, 'card')"
-            style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--purple-bg);color:var(--purple);font-weight:600;cursor:pointer;font-family:inherit;font-size:.82rem">
-            💳 Картага қўш
+            style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:.85rem">
+            💰 Саватга қўшиш (${fmt(parsed.narx)} сўм)
           </button>
         `;
       }
@@ -1192,9 +1188,16 @@ function editCard(i) {
 }
 function renderCard() {
   const list = document.getElementById("cardList");
+  if (!list) return;
   const cnt  = cardItems.length;
-  document.getElementById("card-count").textContent = cnt;
-  if (!cnt) { list.innerHTML = `<div class="empty-state"><span class="empty-icon">💳</span>Ҳали карта товар йўқ</div>`; document.getElementById("cardSub").style.display="none"; return; }
+  const countEl = document.getElementById("card-count");
+  if (countEl) countEl.textContent = cnt;
+  if (!cnt) {
+    list.innerHTML = `<div class="empty-state"><span class="empty-icon">💳</span>Ҳали карта товар йўқ</div>`;
+    const sub = document.getElementById("cardSub");
+    if (sub) sub.style.display="none";
+    return;
+  }
   list.innerHTML = cardItems.map((it,i) => `
     <div class="item-row" id="card-row-${i}" style="border-left:3px solid var(--purple);padding-left:10px">
       <div class="item-body">
@@ -1466,35 +1469,32 @@ function clearAllDebts() {
 /* ── STATS ── */
 function updateStats() {
   const cashBalance = getCashBalance();
-  const cardBalance = getCardBalance();
-  const cashTotal = cashItems.reduce((s,it) => s + it.totalPrice, 0);
-  const cardTotal = cardItems.reduce((s,it) => s + it.totalPrice, 0);
-  const cashRemain = cashBalance - cashTotal;
-  const cardRemain = cardBalance - cardTotal;
-  const totalRemain = cashRemain + cardRemain;
+  const cashTotal   = cashItems.reduce((s,it) => s + it.totalPrice, 0);
+  const totalRemain = cashBalance - cashTotal;
 
-  document.getElementById("income").value = fmt(cashBalance) + " сўм";
-  const cardIncEl = document.getElementById("cardIncome");
-  if (cardIncEl) cardIncEl.value = fmt(cardBalance) + " сўм";
+  const incEl = document.getElementById("income");
+  if (incEl) incEl.value = fmt(cashBalance) + " сўм";
   
-  document.getElementById("sc-kassa").textContent = fmt(cashBalance) + " сўм";
-  const scCardKassa = document.getElementById("sc-card-kassa");
-  if (scCardKassa) scCardKassa.textContent = fmt(cardBalance) + " сўм";
-  document.getElementById("sc-cash").textContent = fmt(cashTotal) + " сўм";
-  const scCardSpend = document.getElementById("sc-card-spend");
-  if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
+  const scKassa = document.getElementById("sc-kassa");
+  if (scKassa) scKassa.textContent = fmt(cashBalance) + " сўм";
+
+  const scCash = document.getElementById("sc-cash");
+  if (scCash) scCash.textContent = fmt(cashTotal) + " сўм";
+
   const debtsTotal = safeGetJSON("bz_debts", []).reduce((s,d) => s + (d.totalPrice||0), 0);
-  document.getElementById("sc-debt").textContent = fmt(debtsTotal) + " сўм";
-  document.getElementById("sc-remain").textContent = fmt(totalRemain) + " сўм";
+  const scDebt = document.getElementById("sc-debt");
+  if (scDebt) scDebt.textContent = fmt(debtsTotal) + " сўм";
+
+  const scRemain = document.getElementById("sc-remain");
+  if (scRemain) scRemain.textContent = fmt(totalRemain) + " сўм";
   
   const chip = document.getElementById("sc-remain-chip");
-  const totalBal = cashBalance + cardBalance;
-  chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < totalBal * 0.2 ? "orange" : "green");
+  if (chip) {
+    chip.className = "stat-chip " + (totalRemain < 0 ? "red" : totalRemain < cashBalance * 0.2 ? "orange" : "green");
+  }
   
-  // Progress bar: naqd + karta xarajatini naqd + karta balansiga nisbatan
-  const totalBudget = cashBalance + cardBalance;
-  const totalSpent  = cashTotal + cardTotal;
-  const pct = totalBudget > 0 ? Math.min(totalSpent / totalBudget * 100, 100) : 0;
+  // Progress bar: naqd xarajatni kassa balansiga nisbatan
+  const pct = cashBalance > 0 ? Math.min(cashTotal / cashBalance * 100, 100) : 0;
   const progFill = document.getElementById("progFill");
   if (progFill) {
     progFill.style.width = pct + "%";
@@ -3015,12 +3015,11 @@ async function bzProcessAiAgent(query) {
   const hist = safeGetJSON("bz_history", []);
   const debts = safeGetJSON("bz_debts", []);
   const cashBal = typeof getCashBalance === "function" ? getCashBalance() : 0;
-  const cardBal = typeof getCardBalance === "function" ? getCardBalance() : 0;
   const t = today();
 
-  // 1. BUYRUQ: Naqdga tovar qo'shish
-  if (/naqd|нақд/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
-    const clean = q.replace(/naqdga|нақдга|naqd|нақд|qo'?sh|yoz|qil/gi, "").trim();
+  // 1. BUYRUQ: Tovar qo'shish (barcha xaridlar kassa/savatchaga qo'shiladi)
+  if (!/qarz|қарз/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
+    const clean = q.replace(/naqdga|нақдга|kartaga|картага|naqd|нақд|karta|карта|qo'?sh|yoz|qil/gi, "").trim();
     const p = parse(clean);
     if (p) {
       p.seq = itemSeq++;
@@ -3029,26 +3028,11 @@ async function bzProcessAiAgent(query) {
       renderCash();
       updateStats();
       bzHaptic("success");
-      return `✅ <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) нақд товарларга муваффақиятли қўшилди!<br>Жорий нақд сават: <b>${fmt(cashItems.reduce((s,i)=>s+i.totalPrice,0))} сўм</b>`;
+      return `✅ <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) savatga muvaffaqiyatli qo'shildi!<br>Joriy savatcha jami: <b>${fmt(cashItems.reduce((s,i)=>s+i.totalPrice,0))} сўм</b>`;
     }
   }
 
-  // 2. BUYRUQ: Kartaga tovar qo'shish
-  if (/karta|карта/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
-    const clean = q.replace(/kartaga|картага|karta|карта|qo'?sh|yoz|qil/gi, "").trim();
-    const p = parse(clean);
-    if (p) {
-      p.seq = itemSeq++;
-      p.market = getMarket();
-      cardItems.push(p);
-      renderCard();
-      updateStats();
-      bzHaptic("success");
-      return `💳 <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) карта товарларга муваффақиятли қўшилди!<br>Жорий карта сават: <b>${fmt(cardItems.reduce((s,i)=>s+i.totalPrice,0))} сўм</b>`;
-    }
-  }
-
-  // 3. BUYRUQ: Qarz qo'shish
+  // 2. BUYRUQ: Qarz qo'shish
   if (/qarz|қарз/i.test(q) && /qo'?sh|yoz|бердим|олди/i.test(q)) {
     const clean = q.replace(/qarzga|қарзга|qarz|қарз|qo'?sh|yoz/gi, "").trim();
     const p = parse(clean);
@@ -3072,19 +3056,17 @@ async function bzProcessAiAgent(query) {
     }
   }
 
-  // 4. SAVOL: Bugungi holat va xulosalar
+  // 3. SAVOL: Bugungi holat va xulosalar
   if (/bugun|бугун|holat|ҳисобот|hisobot|qoldiq|қолдиқ|kassa|касса|balans|баланс/i.test(q)) {
     const todayHist = hist.filter(e => e.date === t);
     const todaySpend = todayHist.reduce((s,e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
     const cartCash = cashItems.reduce((s,i)=>s+i.totalPrice,0);
-    const cartCard = cardItems.reduce((s,i)=>s+i.totalPrice,0);
-    const totalRem = (cashBal + cardBal) - (cartCash + cartCard);
+    const totalRem = cashBal - cartCash;
 
     return `
       <b>📊 Bugungi umumiy moliyaviy holat:</b><br><br>
-      • 💵 <b>Naqd kassa:</b> ${fmt(cashBal)} сўм<br>
-      • 💳 <b>Karta kassa:</b> ${fmt(cardBal)} сўм<br>
-      • 🛒 <b>Hozirgi savatchada:</b> ${cashItems.length + cardItems.length} ta tovar (${fmt(cartCash + cartCard)} сўм)<br>
+      • 💵 <b>Kassa balansi:</b> ${fmt(cashBal)} сўм<br>
+      • 🛒 <b>Hozirgi savatchada:</b> ${cashItems.length} ta tovar (${fmt(cartCash)} сўм)<br>
       • 📅 <b>Bugun tugatilgan xarajat:</b> ${fmt(todaySpend)} сўм<br>
       • ✅ <b>Kassada sof qoldiq:</b> <b style="color:${totalRem < 0 ? 'var(--red)':'var(--green)'}">${fmt(totalRem)} сўм</b>
     `;
