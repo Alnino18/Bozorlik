@@ -53,7 +53,7 @@ function initFirebase() {
   window.BZ_FB.db = firebase.database();
 
   // ─── PIN HIMOYA ─────────────────────────────────────────────────────────────
-  const BZ_PIN = "1234"; // ← O'zingizning PIN ni shu yerga yozing!
+  const BZ_PIN = localStorage.getItem("bz_pin") || "1234"; // Standart: 1234 (localStorage dan o'zgartirish mumkin)
 
   function bzShowPinScreen(onSuccess) {
     if (sessionStorage.getItem("bz_pin_ok") === "1") { onSuccess(); return; }
@@ -185,8 +185,28 @@ function bzStartListeners() {
     // Avval oxirgi 500 tasini yuklaymiz — tezroq ishlaydi
     histRef.limitToLast(500).on("value", snap => {
       const d = snap.val();
-      if (!d) return;
-      const arr = Object.values(d).sort((a, b) => {
+      const localHist = JSON.parse(localStorage.getItem("bz_history") || "[]");
+      if (!d) {
+        if (localHist.length > 0) {
+          localHist.forEach(entry => bzSaveHistoryEntry(entry));
+        }
+        return;
+      }
+      const cloudEntries = Object.entries(d).map(([k, v]) => ({ ...v, fbKey: v.fbKey || k }));
+      // Cloud va localni birlashtirish (offline yozuvlar o'chib ketmasligi uchun)
+      const merged = [...cloudEntries];
+      localHist.forEach(localEntry => {
+        const exists = merged.some(m =>
+          (localEntry.fbKey && m.fbKey === localEntry.fbKey) ||
+          (localEntry.date === m.date && localEntry.time === m.time && localEntry.market === m.market)
+        );
+        if (!exists) {
+          merged.push(localEntry);
+          bzSaveHistoryEntry(localEntry);
+        }
+      });
+
+      const arr = merged.sort((a, b) => {
         const ka = (a.date || "") + (a.time || "");
         const kb = (b.date || "") + (b.time || "");
         return kb.localeCompare(ka);
@@ -211,7 +231,14 @@ function bzStartListeners() {
   if (debtRef) {
     debtRef.on("value", snap => {
       const d = snap.val();
-      const arr = d ? Object.values(d) : [];
+      const localDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+      if (!d) {
+        if (localDebts.length > 0) {
+          localDebts.forEach(debt => bzSaveDebt(debt));
+        }
+        return;
+      }
+      const arr = Object.entries(d).map(([k, v]) => ({ ...v, fbKey: v.fbKey || k }));
 
       window._bzSyncingDebts = true;
       localStorage.setItem("bz_debts", JSON.stringify(arr));
@@ -231,7 +258,14 @@ function bzStartListeners() {
   if (tmplRef) {
     tmplRef.on("value", snap => {
       const d = snap.val();
-      const arr = d ? Object.values(d) : [];
+      const localTmpl = JSON.parse(localStorage.getItem("bz_templates") || "[]");
+      if (!d) {
+        if (localTmpl.length > 0) {
+          bzSaveTemplates(localTmpl);
+        }
+        return;
+      }
+      const arr = Object.values(d);
       window._bzSyncingTemplates = true;
       localStorage.setItem("bz_templates", JSON.stringify(arr));
       window._bzSyncingTemplates = false;
@@ -245,19 +279,19 @@ function bzStartListeners() {
     settRef.on("value", snap => {
       const d = snap.val();
 
-      // Default TG sozlamalari — Firebase bo'sh bo'lsa ham ishlaydi
-      const TG_TOKEN = "8631566876:AAHDinet5d5PF1NE4E_GNPWAIzDhP4g2O8M";
-      const TG_CHAT  = "483325961";
+      const localToken = localStorage.getItem("bz_tg_token") || "";
+      const localChat  = localStorage.getItem("bz_tg_chat")  || "";
 
-      const token = (d && d.tg_token) ? d.tg_token : TG_TOKEN;
-      const chat  = (d && d.tg_chat)  ? d.tg_chat  : TG_CHAT;
+      // Firebase da bo'lsa Firebase dan olamiz, aks holda mavjud local sozlamalarni saqlab qolamiz
+      const token = (d && d.tg_token) ? d.tg_token : localToken;
+      const chat  = (d && d.tg_chat)  ? d.tg_chat  : localChat;
 
-      localStorage.setItem("bz_tg_token", token);
-      localStorage.setItem("bz_tg_chat",  chat);
+      if (token) localStorage.setItem("bz_tg_token", token);
+      if (chat)  localStorage.setItem("bz_tg_chat",  chat);
 
-      // Firebase ga ham saqlaymiz (bir marta)
-      if (!d || !d.tg_token) {
-        bzSaveSettings({ tg_token: TG_TOKEN, tg_chat: TG_CHAT });
+      // Agar Firebase bo'sh bo'lsa va localda bor bo'lsa, Firebase ga saqlaymiz
+      if ((!d || !d.tg_token) && token && chat) {
+        bzSaveSettings({ tg_token: token, tg_chat: chat });
       }
 
       if (d && d.dark !== undefined) {
@@ -273,8 +307,22 @@ function bzStartListeners() {
 function bzSaveBalance(cash, card) {
   const ref = bzRef("balances");
   if (!ref) return;
-  ref.set({ cash: +cash || 0, card: +card || 0, updatedAt: Date.now() })
+  ref.update({ cash: +cash || 0, card: +card || 0, updatedAt: Date.now() })
      .catch(e => console.warn("bzSaveBalance:", e));
+}
+
+function bzUpdateCashBalance(cash) {
+  const ref = bzRef("balances");
+  if (!ref) return;
+  ref.update({ cash: +cash || 0, updatedAt: Date.now() })
+     .catch(e => console.warn("bzUpdateCashBalance:", e));
+}
+
+function bzUpdateCardBalance(card) {
+  const ref = bzRef("balances");
+  if (!ref) return;
+  ref.update({ card: +card || 0, updatedAt: Date.now() })
+     .catch(e => console.warn("bzUpdateCardBalance:", e));
 }
 
 function bzSaveHistoryEntry(entry) {
@@ -293,15 +341,17 @@ function bzSafeKey(id) {
 function bzSaveDebt(debt) {
   const ref = bzRef("debts");
   if (!ref) return;
-  const key = debt.fbKey || bzSafeKey(debt.id || Date.now());
+  const key = debt.fbKey || (debt.id ? bzSafeKey(debt.id) : bzSafeKey(Date.now()));
   debt.fbKey = key;
   ref.child(key).set(debt)
      .catch(e => console.warn("bzSaveDebt:", e));
 }
 
 function bzDeleteDebt(debt) {
-  if (!debt || !debt.fbKey) return;
-  const ref = bzRef("debts/" + debt.fbKey);
+  if (!debt) return;
+  const key = debt.fbKey || (debt.id ? bzSafeKey(debt.id) : null);
+  if (!key) return;
+  const ref = bzRef("debts/" + key);
   if (!ref) return;
   ref.remove().catch(e => console.warn("bzDeleteDebt:", e));
 }
@@ -353,13 +403,16 @@ function bzPatchFunctions() {
       // Oldingi holat
       const prevDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
       const prevLen = prevDebts.length;
-      _addDebt();
+      const res = _addDebt();
       // Yangi holatni olish
       const newDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
       if (newDebts.length > prevLen) {
         const newDebt = newDebts[newDebts.length - 1];
         bzSaveDebt(newDebt);
+        localStorage.setItem("bz_debts", JSON.stringify(newDebts));
+        if (window.allDebtsArray) window.allDebtsArray = newDebts;
       }
+      return res;
     };
   }
 
@@ -367,10 +420,13 @@ function bzPatchFunctions() {
   const _deleteAllDebt = window.deleteAllDebt;
   if (typeof _deleteAllDebt === "function") {
     window.deleteAllDebt = function(idx) {
-      const arr = window.allDebtsArray || [];
+      const arr = window.allDebtsArray || JSON.parse(localStorage.getItem("bz_debts") || "[]");
       const debt = arr[idx];
-      _deleteAllDebt(idx);
-      if (debt) bzDeleteDebt(debt);
+      const res = _deleteAllDebt(idx);
+      if (res !== false && debt) {
+        bzDeleteDebt(debt);
+      }
+      return res;
     };
   }
 
@@ -380,10 +436,13 @@ function bzPatchFunctions() {
     window.deleteSelectedAllDebts = function() {
       const selected = typeof getAllSelectedDebtIndexes === "function"
         ? getAllSelectedDebtIndexes() : [];
-      const arr = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+      const arr = window.allDebtsArray || JSON.parse(localStorage.getItem("bz_debts") || "[]");
       const toDelete = selected.map(i => arr[i]).filter(Boolean);
-      _deleteSelectedAllDebts();
-      toDelete.forEach(d => bzDeleteDebt(d));
+      const res = _deleteSelectedAllDebts();
+      if (res !== false) {
+        toDelete.forEach(d => bzDeleteDebt(d));
+      }
+      return res;
     };
   }
 
@@ -391,8 +450,11 @@ function bzPatchFunctions() {
   const _clearAllDebts = window.clearAllDebts;
   if (typeof _clearAllDebts === "function") {
     window.clearAllDebts = function() {
-      _clearAllDebts();
-      bzDeleteAllDebts(); // Firebase dan ham o'chirish
+      const res = _clearAllDebts();
+      if (res !== false) {
+        bzDeleteAllDebts(); // Firebase dan ham o'chirish
+      }
+      return res;
     };
   }
 
@@ -400,8 +462,11 @@ function bzPatchFunctions() {
   const _clearHistory = window.clearHistory;
   if (typeof _clearHistory === "function") {
     window.clearHistory = function() {
-      _clearHistory();
-      bzClearHistory();
+      const res = _clearHistory();
+      if (res !== false) {
+        bzClearHistory();
+      }
+      return res;
     };
   }
 
@@ -409,19 +474,19 @@ function bzPatchFunctions() {
   const _saveTemplates = window.saveTemplates;
   if (typeof _saveTemplates === "function") {
     window.saveTemplates = function(arr) {
-      _saveTemplates(arr);
+      const res = _saveTemplates(arr);
       bzSaveTemplates(arr);
+      return res;
     };
   }
 
-  // 8.8 setCashBalance / setCardBalance
+  // 8.8 setCashBalance / setCardBalance (Atomic ref.update)
   const _setCashBalance = window.setCashBalance;
   if (typeof _setCashBalance === "function") {
     window.setCashBalance = function(amount) {
       const result = _setCashBalance(amount);
       if (!window._bzSyncingBalance) {
-        const card = +localStorage.getItem("bz_card_balance") || 0;
-        bzSaveBalance(amount, card);
+        bzUpdateCashBalance(amount);
       }
       return result;
     };
@@ -432,8 +497,7 @@ function bzPatchFunctions() {
     window.setCardBalance = function(amount) {
       const result = _setCardBalance(amount);
       if (!window._bzSyncingBalance) {
-        const cash = +localStorage.getItem("bz_cash_balance") || 0;
-        bzSaveBalance(cash, amount);
+        bzUpdateCardBalance(amount);
       }
       return result;
     };
@@ -453,6 +517,19 @@ function bzPatchFunctions() {
       if (fbKey && newMarket && newMarket.trim()) {
         const ref = bzRef("history/" + fbKey + "/market");
         if (ref) ref.set(newMarket.trim());
+      }
+    };
+  }
+
+  // 8.13 saveTg — Telegram sozlamalarini Firebase ga sinxronlash
+  const _saveTg = window.saveTg;
+  if (typeof _saveTg === "function") {
+    window.saveTg = function() {
+      _saveTg();
+      const token = localStorage.getItem("bz_tg_token");
+      const chat  = localStorage.getItem("bz_tg_chat");
+      if (token && chat) {
+        bzSaveSettings({ tg_token: token, tg_chat: chat });
       }
     };
   }

@@ -93,9 +93,30 @@ function clearNote() {
   if (noteField) noteField.value = "";
 }
 
+/* ── SAFE JSON HELPER ── */
+function safeGetJSON(key, defaultVal) {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null ? JSON.parse(v) : defaultVal;
+  } catch(e) {
+    console.warn("safeGetJSON parse error for " + key, e);
+    return defaultVal;
+  }
+}
+
 /* ── FORMAT ── */
-const fmt    = n => Math.round(n).toLocaleString("ru-RU");
-const today  = () => new Date().toISOString().split("T")[0];
+const fmt    = n => Math.round(n || 0).toLocaleString("ru-RU");
+function toLocalDateStr(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function today() {
+  return toLocalDateStr();
+}
+window.today = today;
+window.toLocalDateStr = toLocalDateStr;
 const fmtD   = s => { if (!s) return "—"; const [y,m,d]=s.split("-"); return `${d}.${m}.${y}`; };
 const esc    = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
@@ -208,7 +229,7 @@ async function bzTgHandleMessage(msg, token) {
   }
 
   if (text === "/oxirgi") {
-    const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+    const h = safeGetJSON("bz_history", []);
     const last = h.length ? h.reduce((a,b) => {
       return ((b.date||"")+(b.time||"")) > ((a.date||"")+(a.time||"")) ? b : a;
     }) : null;
@@ -226,23 +247,30 @@ async function bzTgHandleMessage(msg, token) {
   const match = text.match(/^(.+?)\s+(\d+(?:[.,]\d+)?(?:kg|кг))?\s*(\d{3,})$/i);
   if (match) {
     const name  = match[1].trim();
-    const kg    = match[2] ? parseFloat(match[2]) : null;
-    const price = parseInt(match[3].replace(/[.,]/g,""));
+    const kg    = match[2] ? parseFloat(match[2].replace(",", ".")) : null;
+    const price = parseInt(match[3].replace(/[.,]/g,""), 10);
+    const unitPrice = (kg && kg > 0) ? Math.round(price / kg) : price;
+
+    // Deduct from cash balance
+    const curCash = getCashBalance();
+    const newCash = curCash - price;
+    setCashBalance(newCash);
 
     // localStorage ga qo'shamiz (aktiv bozor bo'lsa)
     const market = localStorage.getItem("bz_active_market") || "Telegram";
 
     // Quick add sifatida saqlaymiz
-    const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-    const today2 = new Date().toISOString().slice(0,10);
+    const h = safeGetJSON("bz_history", []);
+    const today2 = today();
 
     // Bugungi bozor bor bo'lsa unga qo'shamiz
     const todayEntry = h.find(e => e.date === today2 && e.market === market);
     if (todayEntry) {
       if (!todayEntry.cashItems) todayEntry.cashItems = [];
-      todayEntry.cashItems.push({ name, kg: kg||"", unitPrice: price, totalPrice: price });
+      todayEntry.cashItems.push({ name, kg: kg||"", unitPrice: unitPrice, totalPrice: price });
       todayEntry.cashTotal = (todayEntry.cashItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
       todayEntry.spent = todayEntry.cashTotal;
+      todayEntry.balance = newCash;
       localStorage.setItem("bz_history", JSON.stringify(h));
       if (typeof bzSaveHistoryEntry === "function") bzSaveHistoryEntry(todayEntry);
     } else {
@@ -251,13 +279,14 @@ async function bzTgHandleMessage(msg, token) {
         date: today2,
         time: new Date().toTimeString().slice(0,5),
         market,
-        cashItems: [{ name, kg: kg||"", unitPrice: price, totalPrice: price }],
+        cashItems: [{ name, kg: kg||"", unitPrice: unitPrice, totalPrice: price }],
         cashTotal: price,
         spent: price,
         cardItems: [],
         cardTotal: 0,
-        cashBalance: getCashBalance(),
+        cashBalance: curCash,
         cardBalance: getCardBalance(),
+        balance: newCash,
         fbKey: null
       };
       h.push(newEntry);
@@ -267,6 +296,7 @@ async function bzTgHandleMessage(msg, token) {
 
     if (typeof renderHistory === "function") renderHistory();
     if (typeof updateDashboard === "function") updateDashboard();
+    if (typeof updateStats === "function") updateStats();
 
     await bzTgReply(token, chatId,
       `✅ Kiritildi: *${name}*${kg ? ` ${kg}кг` : ""} — *${fmt(price)} сўм*`
@@ -373,7 +403,7 @@ function bzAutoSelectMarket(name) {
 window.bzSaveMarketGeo = function(marketName) {
   if (!navigator.geolocation) { showToast("GPS yo'q"); return; }
   navigator.geolocation.getCurrentPosition(pos => {
-    const saved = JSON.parse(localStorage.getItem("bz_market_geo") || "{}");
+    const saved = safeGetJSON("bz_market_geo", {});
     saved[marketName] = { lat: pos.coords.latitude, lng: pos.coords.longitude, radius: 300 };
     localStorage.setItem("bz_market_geo", JSON.stringify(saved));
     showToast("📍 " + marketName + " joylashuvi saqlandi!");
@@ -390,7 +420,7 @@ window.bzSaveMarketGeo = function(marketName) {
 
 // Saqlangan koordinatlarni yuklash
 function bzLoadMarketGeo() {
-  const saved = JSON.parse(localStorage.getItem("bz_market_geo") || "{}");
+  const saved = safeGetJSON("bz_market_geo", {});
   Object.entries(saved).forEach(([name, geo]) => {
     const idx = BZ_MARKETS_GEO.findIndex(m => m.name === name);
     if (idx >= 0) {
@@ -400,6 +430,31 @@ function bzLoadMarketGeo() {
     } else {
       BZ_MARKETS_GEO.push({ name, ...geo, radius: geo.radius || 300 });
     }
+  });
+}
+
+function bzInitMarketLongPress() {
+  document.querySelectorAll(".market-btn").forEach(btn => {
+    let timer = null;
+    const nameEl = btn.querySelector(".mb-name");
+    const name = nameEl ? nameEl.textContent.trim() : "";
+    if (!name || name === "Бошқа") return;
+
+    const start = () => {
+      timer = setTimeout(() => {
+        if (confirm(`📍 ${name} joylashuvini GPS orqali saqlaysizmi?`)) {
+          bzSaveMarketGeo(name);
+        }
+      }, 900);
+    };
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+    btn.addEventListener("touchstart", start, { passive: true });
+    btn.addEventListener("touchend", cancel, { passive: true });
+    btn.addEventListener("touchcancel", cancel, { passive: true });
+    btn.addEventListener("mousedown", start);
+    btn.addEventListener("mouseup", cancel);
+    btn.addEventListener("mouseleave", cancel);
   });
 }
 
@@ -509,10 +564,26 @@ async function bzAnalyzeImage(base64) {
   resultText.innerHTML = "<span style='color:var(--blue)'>🤖 AI tahlil qilyapti...</span>";
   resultBtns.innerHTML = "";
 
+  const apiKey = localStorage.getItem("bz_ai_key");
+  if (!apiKey) {
+    resultText.innerHTML = `
+      <div style="font-size:.85rem;color:var(--text2);margin-bottom:8px">AI bilan aniqlash uchun API kalitini kiriting:</div>
+      <input id="bzAiKeyInp" class="field" type="password" placeholder="sk-ant-..." style="margin-bottom:8px"/>
+      <button onclick="localStorage.setItem('bz_ai_key', document.getElementById('bzAiKeyInp').value.trim()); showToast('API kalit saqlandi');"
+        style="padding:8px 14px;border-radius:8px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-weight:600;font-family:inherit">Saqlash</button>
+    `;
+    return;
+  }
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 300,
@@ -572,10 +643,13 @@ function bzCamAddItem(name, price, type) {
   const inp = document.getElementById(type === "cash" ? "cashInp" : "cardInp");
   if (inp) {
     inp.value = name + " " + price;
-    // addItem funksiyasini chaqiramiz
-    if (type === "cash" && typeof addCashItem === "function") addCashItem();
-    else if (type === "card" && typeof addCardItem === "function") addCardItem();
-    else inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    if (type === "cash") {
+      if (typeof addCash === "function") addCash();
+      else if (typeof addCashItem === "function") addCashItem();
+    } else {
+      if (typeof addCard === "function") addCard();
+      else if (typeof addCardItem === "function") addCardItem();
+    }
   }
   document.getElementById("bzCameraModal")?.remove();
   showToast("✅ " + name + " qo'shildi!");
@@ -588,7 +662,7 @@ function bzCamAddItem(name, price, type) {
 ══════════════════════════════════════════ */
 function bzGetLastPrice(itemName) {
   if (!itemName || itemName.length < 2) return null;
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const name = itemName.trim().toLowerCase();
 
   // Barcha tarixdan ushbu tovarni qidirish
@@ -596,8 +670,9 @@ function bzGetLastPrice(itemName) {
   h.forEach(entry => {
     const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
     allItems.forEach(item => {
-      if (item.name && item.name.toLowerCase().includes(name) && item.unitPrice) {
-        found.push({ date: entry.date, price: item.unitPrice, market: entry.market || "" });
+      const itPrice = item.unitPrice || item.totalPrice;
+      if (item.name && item.name.toLowerCase().includes(name) && itPrice) {
+        found.push({ date: entry.date, price: itPrice, market: entry.market || "" });
       }
     });
   });
@@ -610,7 +685,9 @@ function bzGetLastPrice(itemName) {
 
 function bzShowPriceHint(inputEl, nameEl) {
   // nameEl — tovar nomi input
-  const name = (nameEl ? nameEl.value : inputEl.value || "").trim();
+  const val = (nameEl ? nameEl.value : inputEl.value || "").trim();
+  // Tovarning nom qismini ajratib olamiz (masalan: "Мош 10кг..." dan "Мош")
+  const name = val.replace(/\s+[\d.,]+.*$/, "").trim();
   if (name.length < 2) { bzRemovePriceHint(inputEl); return; }
 
   const last = bzGetLastPrice(name);
@@ -633,19 +710,19 @@ function bzRemovePriceHint(inputEl) {
 
 // Tovar nomi yozilganda narx tarixini ko'rsatish
 function bzAttachPriceHints() {
-  // Naqd tovar nomi
-  const cashNameInp = document.getElementById("itemName");
-  if (cashNameInp && !cashNameInp._bzHintAttached) {
-    cashNameInp._bzHintAttached = true;
-    cashNameInp.addEventListener("input", () => bzShowPriceHint(cashNameInp, cashNameInp));
-    cashNameInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cashNameInp), 2000));
+  // Naqd tovar input
+  const cashInp = document.getElementById("cashInp");
+  if (cashInp && !cashInp._bzHintAttached) {
+    cashInp._bzHintAttached = true;
+    cashInp.addEventListener("input", () => bzShowPriceHint(cashInp, cashInp));
+    cashInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cashInp), 2000));
   }
-  // Karta tovar nomi
-  const cardNameInp = document.getElementById("cardItemName");
-  if (cardNameInp && !cardNameInp._bzHintAttached) {
-    cardNameInp._bzHintAttached = true;
-    cardNameInp.addEventListener("input", () => bzShowPriceHint(cardNameInp, cardNameInp));
-    cardNameInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cardNameInp), 2000));
+  // Karta tovar input
+  const cardInp = document.getElementById("cardInp");
+  if (cardInp && !cardInp._bzHintAttached) {
+    cardInp._bzHintAttached = true;
+    cardInp.addEventListener("input", () => bzShowPriceHint(cardInp, cardInp));
+    cardInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cardInp), 2000));
   }
 }
 
@@ -666,7 +743,7 @@ function bzCheckReportSchedule() {
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0=Yakshanba, 1=Dushanba
   const hour = now.getHours();
-  const dateStr = now.toISOString().slice(0, 10);
+  const dateStr = today();
 
   const lastWeekly  = localStorage.getItem("bz_last_weekly_report");
   const lastMonthly = localStorage.getItem("bz_last_monthly_report");
@@ -678,7 +755,7 @@ function bzCheckReportSchedule() {
   }
 
   // Oylik: Har oyning 1-kuni soat 10:00 da
-  const monthStr = now.toISOString().slice(0, 7);
+  const monthStr = today().slice(0, 7);
   if (now.getDate() === 1 && hour >= 10 && lastMonthly !== monthStr) {
     localStorage.setItem("bz_last_monthly_report", monthStr);
     bzSendMonthlyReport();
@@ -689,10 +766,11 @@ async function bzSendWeeklyReport() {
   const tg = getTG();
   if (!tg.token || !tg.chatId) return;
 
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const now = new Date();
   // O'tgan hafta
-  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+  const weekAgo = toLocalDateStr(dAgo);
   const thisWeek = h.filter(e => (e.date || "") >= weekAgo);
 
   if (!thisWeek.length) return;
@@ -722,21 +800,12 @@ async function bzSendWeeklyReport() {
     .sort((a,b) => b[1]-a[1]).slice(0, 5)
     .map(([n,s]) => '  ' + n + ': ' + fmt(s) + ' сўм').join('\n');
 
-  const text = `📊 *HAFTALIK HISOBOT*
-` +
-    `📅 ${weekAgo} — ${now.toISOString().slice(0,10)}
-
-` +
-    `💰 Jami xarajat: *${fmt(total)} сўм*
-` +
-    `🛒 Bozor soni: *${count} ta*
-` +
-    `📍 Bozorlar:
-${mktLines}
-
-` +
-    `🏆 TOP tovarlar:
-${topItems}`;
+  const text = `📊 *HAFTALIK HISOBOT*\n\n` +
+    `📅 ${weekAgo} — ${today()}\n\n` +
+    `💰 Jami xarajat: *${fmt(total)} сўм*\n` +
+    `🛒 Bozor soni: *${count} ta*\n\n` +
+    `📍 Bozorlar:\n${mktLines}\n\n` +
+    `🏆 TOP tovarlar:\n${topItems}`;
 
   await bzTgReply(tg.token, tg.chatId, text);
   showToast("📊 Haftalik hisobot yuborildi!");
@@ -746,11 +815,11 @@ async function bzSendMonthlyReport() {
   const tg = getTG();
   if (!tg.token || !tg.chatId) return;
 
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const now = new Date();
   // O'tgan oy
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+  const lastMonthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth()+1).padStart(2,"0")}`;
   const thisMonth = h.filter(e => (e.date || "").startsWith(lastMonthStr));
 
   if (!thisMonth.length) return;
@@ -845,7 +914,6 @@ function bzAddSwipe(el, onLeft, onRight) {
 ══════════════════════════════════════════ */
 
 function bzAttachSwipes() {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
   document.querySelectorAll(".hist-entry[data-idx]").forEach(el => {
     const idx = +el.getAttribute("data-idx");
     bzAddSwipe(
@@ -853,6 +921,7 @@ function bzAttachSwipes() {
       // Chapga — o'chirish
       () => {
         if (!confirm("Bu yozuvni o'chirasizmi?")) return;
+        const h = safeGetJSON("bz_history", []);
         const entry = h[idx]; // Firebase uchun oldin olamiz
         h.splice(idx, 1);
         localStorage.setItem("bz_history", JSON.stringify(h));
@@ -862,6 +931,7 @@ function bzAttachSwipes() {
           if (ref) ref.remove();
         }
         renderHistory();
+        updateStats();
         if (typeof updateDashboard === "function") updateDashboard();
         showToast("🗑️ O'chirildi");
       },
@@ -943,6 +1013,7 @@ function goTab(name) {
   document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
   document.getElementById("ni-" + name).classList.add("active");
+  if (name === "main")    { updateStats(); updateDashboard(); }
   if (name === "debt")    renderAllDebts();
   if (name === "history") renderHistory();
   if (name === "chart")   { updateCharts(); renderMonthCompare(); renderPriceHistory(); renderTopExpenses(); }
@@ -985,11 +1056,59 @@ function initSwipe() {
 
 /* ── PARSE ── */
 function parse(input) {
-  const m1 = input.match(/^(.+?)\s+([\d.]+)кг\s+\((\d[\d ]*)\)\s+(\d[\d ]*)$/i);
-  if (m1) return { name: m1[1], kg: m1[2], unitPrice: +m1[3].replace(/\s/g,""), totalPrice: +m1[4].replace(/\s/g,"") };
-  const m2 = input.match(/^(.+?)\s+(\d[\d ]*)$/);
-  if (m2) return { name: m2[1], kg: null, unitPrice: null, totalPrice: +m2[2].replace(/\s/g,"") };
+  if (!input || typeof input !== "string") return null;
+  const s = input.trim();
+  // 1. Format: Nomi 10кг (15000) 150000 yoki 1,5 kg (15 000) 22 500
+  const m1 = s.match(/^(.+?)\s+([\d.,]+)\s*(?:кг|kg)\s+\((\d[\d ]*)\)\s+(\d[\d ]*)$/i);
+  if (m1) {
+    const kg = m1[2].replace(',', '.');
+    const unitPrice = +m1[3].replace(/\s/g, '');
+    const totalPrice = +m1[4].replace(/\s/g, '');
+    if (totalPrice <= 0 || isNaN(totalPrice)) return null;
+    return { name: m1[1].trim(), kg, unitPrice, totalPrice };
+  }
+
+  // 2. Format: Nomi 10 * 15000 yoki 1.5*15000 yoki 1,5 * 15 000
+  const mMul = s.match(/^(.+?)\s+([\d.,]+)\s*(?:кг|kg)?\s*\*\s*(\d[\d ]*)$/i);
+  if (mMul) {
+    const kg = mMul[2].replace(',', '.');
+    const unitPrice = +mMul[3].replace(/\s/g, '');
+    const totalPrice = Math.round(+kg * unitPrice);
+    if (totalPrice <= 0 || isNaN(totalPrice)) return null;
+    return { name: mMul[1].trim(), kg, unitPrice, totalPrice };
+  }
+
+  // 3. Format: Nomi 5кг 200000 yoki 2.5 kg 200000
+  const mKgOnly = s.match(/^(.+?)\s+([\d.,]+)\s*(?:кг|kg)\s+(\d[\d ]*)$/i);
+  if (mKgOnly) {
+    const kg = mKgOnly[2].replace(',', '.');
+    const totalPrice = +mKgOnly[3].replace(/\s/g, '');
+    if (totalPrice <= 0 || isNaN(totalPrice)) return null;
+    const numKg = +kg;
+    const unitPrice = numKg > 0 ? Math.round(totalPrice / numKg) : null;
+    return { name: mKgOnly[1].trim(), kg, unitPrice, totalPrice };
+  }
+
+  // 4. Format: Nomi 150000 yoki Nomi 150 000
+  const m2 = s.match(/^(.+?)\s+(\d[\d ]*)$/);
+  if (m2) {
+    const totalPrice = +m2[2].replace(/\s/g, '');
+    if (totalPrice <= 0 || isNaN(totalPrice)) return null;
+    return { name: m2[1].trim(), kg: null, unitPrice: null, totalPrice };
+  }
+
   return null;
+}
+
+function formatItemForInput(it) {
+  if (!it) return "";
+  if (it.kg && it.unitPrice) {
+    return `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}`;
+  } else if (it.kg) {
+    return `${it.name} ${it.kg}кг ${it.totalPrice}`;
+  } else {
+    return `${it.name} ${it.totalPrice}`;
+  }
 }
 
 /* ── CASH (НАҚД ТОВАР) ── */
@@ -997,7 +1116,7 @@ function addCash() {
   const inp = document.getElementById("cashInp");
   const t = inp.value.trim(); if (!t) return;
   const p = parse(t);
-  if (!p) { showToast("⚠️ Формат: Мош 10кг (15000) 150000"); return; }
+  if (!p) { showToast("⚠️ Формат: Мош 10кг (15000) 150000 ёки Кийим 80000"); return; }
   
   p.seq = itemSeq++;
   p.market = getMarket();
@@ -1014,8 +1133,8 @@ function delCash(i) {
 }
 function editCash(i) {
   const it = cashItems[i];
-  document.getElementById("cashInp").value = it.kg
-    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
+  if (!it) return;
+  document.getElementById("cashInp").value = formatItemForInput(it);
   delCash(i);
   document.getElementById("cashInp").focus();
 }
@@ -1049,7 +1168,7 @@ function addCard() {
   const inp = document.getElementById("cardInp");
   const t = inp.value.trim(); if (!t) return;
   const p = parse(t);
-  if (!p) { showToast("⚠️ Формат: Гўшт 200000"); return; }
+  if (!p) { showToast("⚠️ Формат: Гўшт 200000 ёки Гўшт 5кг (40000) 200000"); return; }
   
   p.seq = itemSeq++;
   p.market = getMarket();
@@ -1066,8 +1185,8 @@ function delCard(i) {
 }
 function editCard(i) {
   const it = cardItems[i];
-  document.getElementById("cardInp").value = it.kg
-    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
+  if (!it) return;
+  document.getElementById("cardInp").value = formatItemForInput(it);
   delCard(i);
   document.getElementById("cardInp").focus();
 }
@@ -1120,9 +1239,9 @@ function addDebt() {
     id: Date.now() + Math.random()
   };
   
-  const allDebts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
-  allDebts.push(newDebt);
-  localStorage.setItem("bz_debts", JSON.stringify(allDebts));
+  loadAllDebts();
+  allDebtsArray.push(newDebt);
+  saveAllDebtsToStorage();
   
   inp.value = "";
   document.getElementById("debtWho").value = "";
@@ -1130,25 +1249,29 @@ function addDebt() {
   inp.focus();
   
   renderAllDebts();
+  updateStats();
   
   showToast("✅ Қарз сақланди: " + p.name + " - " + fmt(p.totalPrice) + " сўм");
 }
 
 /* ── ALL DEBTS (БАРЧА ҚАРЗЛАР) ── */
-let allDebtsArray = [];
+var allDebtsArray = [];
+window.allDebtsArray = allDebtsArray;
 
 function loadAllDebts() {
-  allDebtsArray = JSON.parse(localStorage.getItem("bz_debts")||"[]");
+  allDebtsArray = safeGetJSON("bz_debts", []);
+  window.allDebtsArray = allDebtsArray;
 }
 
 function saveAllDebtsToStorage() {
   localStorage.setItem("bz_debts", JSON.stringify(allDebtsArray));
+  window.allDebtsArray = allDebtsArray;
 }
 
 function renderAllDebts() {
   loadAllDebts();
   const list = document.getElementById("allDebtList");
-  const tot  = allDebtsArray.reduce((s,d)=>s+d.totalPrice,0);
+  const tot  = allDebtsArray.reduce((s,d)=>s+(d.totalPrice||0),0);
   document.getElementById("allDebtTotal").textContent = fmt(tot);
   document.getElementById("allDebtCnt").textContent   = allDebtsArray.length;
   
@@ -1182,21 +1305,32 @@ function renderAllDebts() {
 }
 
 function deleteAllDebt(idx) {
-  if (!confirm("Қарзни ўчиришни хохлайсизми?")) return;
+  if (!confirm("Қарзни ўчиришни хохлайсизми?")) return false;
+  loadAllDebts();
   const debt = allDebtsArray[idx];
   allDebtsArray.splice(idx, 1);
   saveAllDebtsToStorage();
   renderAllDebts();
+  updateStats();
   showToast("✅ Қарз ўчирилди");
+  return debt || true;
 }
 
 function editAllDebt(idx) {
+  loadAllDebts();
   const it = allDebtsArray[idx];
-  document.getElementById("debtInp").value = it.kg
-    ? `${it.name} ${it.kg}кг (${it.unitPrice}) ${it.totalPrice}` : `${it.name} ${it.totalPrice}`;
+  if (!it) return;
+  document.getElementById("debtInp").value = formatItemForInput(it);
   document.getElementById("debtDate").value = it.date || today();
   document.getElementById("debtWho").value  = it.who  || "";
-  deleteAllDebt(idx);
+  // Silently remove from list and Firebase for editing without confusing delete prompt
+  allDebtsArray.splice(idx, 1);
+  saveAllDebtsToStorage();
+  if (it && it.fbKey && typeof bzDeleteDebt === "function") {
+    bzDeleteDebt(it);
+  }
+  renderAllDebts();
+  updateStats();
   document.getElementById("debtInp").focus();
   showToast("✏️ Қарзни таҳрирлаб, 'Қўшиш' тугмасини босинг");
 }
@@ -1216,10 +1350,11 @@ function deleteSelectedAllDebts() {
   const selected = getAllSelectedDebtIndexes();
   if (selected.length === 0) {
     showToast("⚠️ Ҳеч қандай қарз танланмаган");
-    return;
+    return false;
   }
-  if (!confirm(`${selected.length} та қарзни ўчиришни хохлайсизми?`)) return;
+  if (!confirm(`${selected.length} та қарзни ўчиришни хохлайсизми?`)) return false;
   
+  loadAllDebts();
   selected.sort((a,b) => b - a);
   const deletedDebts = selected.map(idx => allDebtsArray[idx]);
   selected.forEach(idx => {
@@ -1227,7 +1362,9 @@ function deleteSelectedAllDebts() {
   });
   saveAllDebtsToStorage();
   renderAllDebts();
+  updateStats();
   showToast(`✅ ${selected.length} та қарз ўчирилди`);
+  return deletedDebts;
 }
 
 function selectAllAllDebts() {
@@ -1258,15 +1395,15 @@ function updateAllDebtSelectAll() {
 
 function buildDebtSummaryReport() {
   const t = today();
-  const hist = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const hist = safeGetJSON("bz_history", []);
   const spendToday = hist.filter(e => e.date === t)
     .reduce((s,e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
 
   const remain = getCashBalance() + getCardBalance();
 
-  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
-  const debtToday = debts.filter(d => d.date === t).reduce((s,d) => s + d.totalPrice, 0);
-  const debtOld   = debts.filter(d => d.date !== t).reduce((s,d) => s + d.totalPrice, 0);
+  const debts = safeGetJSON("bz_debts", []);
+  const debtToday = debts.filter(d => d.date === t).reduce((s,d) => s + (d.totalPrice||0), 0);
+  const debtOld   = debts.filter(d => d.date !== t).reduce((s,d) => s + (d.totalPrice||0), 0);
 
   const dateStr = new Date().toLocaleDateString("ru-RU", {day:"2-digit", month:"2-digit", year:"numeric"});
 
@@ -1287,12 +1424,13 @@ function sendDebtSummary() {
 }
 
 function clearAllDebts() {
-  if(!confirm("БАРЧА қарзлар ўчирилсинми? Бу амални қайтариб бўлмайди!")) return;
-  const deletedDebts = [...allDebtsArray];
+  if(!confirm("БАРЧА қарзлар ўчирилсинми? Бу амални қайтариб бўлмайди!")) return false;
   allDebtsArray = [];
   saveAllDebtsToStorage();
   renderAllDebts();
-  showToast("✅ Барча қарзлар тозаланди"); // bulk delete
+  updateStats();
+  showToast("✅ Барча қарзлар тозаланди");
+  return true;
 }
 
 /* ── STATS ── */
@@ -1315,7 +1453,7 @@ function updateStats() {
   document.getElementById("sc-cash").textContent = fmt(cashTotal) + " сўм";
   const scCardSpend = document.getElementById("sc-card-spend");
   if (scCardSpend) scCardSpend.textContent = fmt(cardTotal) + " сўм";
-  const debtsTotal = JSON.parse(localStorage.getItem("bz_debts") || "[]").reduce((s,d) => s + d.totalPrice, 0);
+  const debtsTotal = safeGetJSON("bz_debts", []).reduce((s,d) => s + (d.totalPrice||0), 0);
   document.getElementById("sc-debt").textContent = fmt(debtsTotal) + " сўм";
   document.getElementById("sc-remain").textContent = fmt(totalRemain) + " сўм";
   
@@ -1339,13 +1477,11 @@ function updateStats() {
   if (progTrack) progTrack.style.display = "block";
 
   updateDashboard();
-
-  if (pct >= 100 && cashBalance > 0) launchConfetti();
 }
 
 /* ── FINISH ── */
 function buildDebtSectionText(market, date) {
-  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]")
+  const debts = safeGetJSON("bz_debts", [])
     .filter(d => d.date === date && d.market === market)
     .sort((a,b) => (a.id||0) - (b.id||0));
 
@@ -1360,7 +1496,7 @@ function buildDebtSectionText(market, date) {
     if (d.unitPrice) s += ` (${fmt(d.unitPrice)})`;
     s += ` — ${fmt(d.totalPrice)} сўм\n`;
   });
-  const debtTotal = debts.reduce((sum,d) => sum + d.totalPrice, 0);
+  const debtTotal = debts.reduce((sum,d) => sum + (d.totalPrice||0), 0);
   s += `Жами қарз: ${fmt(debtTotal)} сўм`;
   return s;
 }
@@ -1458,9 +1594,21 @@ function finish() {
       cashItems: [...g.cash], cardItems: [...g.card],
       date: today(), time: timeStr, note
     });
-
-    lastReceiptData = { market: m, cashBalance: entryCashBalance, cardBalance: entryCardBalance, cashTotal: mCashTotal, cardTotal: mCardTotal, balance: runningCash, cashItems: [...g.cash], cardItems: [...g.card], date: today(), time: timeStr, note };
   });
+
+  lastReceiptData = {
+    market: marketOrder.join(", "),
+    cashBalance: cashBalanceStart,
+    cardBalance: cardBalanceStart,
+    cashTotal,
+    cardTotal,
+    balance: runningCash,
+    cashItems: [...cashItems],
+    cardItems: [...cardItems],
+    date: today(),
+    time: timeStr,
+    note
+  };
 
   const receiptBtn = document.getElementById("receiptBtn");
   if (receiptBtn) receiptBtn.style.display = "";
@@ -1527,12 +1675,21 @@ function updateTgPill() {
 
 /* ── HISTORY ── */
 function saveHistory(entry) {
-  const h = JSON.parse(localStorage.getItem("bz_history")||"[]");
+  const h = safeGetJSON("bz_history", []);
   h.unshift(entry); if(h.length>300) h.splice(300);
   localStorage.setItem("bz_history", JSON.stringify(h));
 }
+
+function resendEntryTGByIndex(idx) {
+  const h = safeGetJSON("bz_history", []);
+  const e = h[idx];
+  if (!e) { showToast("⚠️ Топилмади"); return; }
+  const report = buildEntryReport(e);
+  resendEntryTG(report);
+}
+
 function renderHistory() {
-  const h   = JSON.parse(localStorage.getItem("bz_history")||"[]");
+  const h   = safeGetJSON("bz_history", []);
   const mon = document.getElementById("histMonth").value;
   const selMkt = window._histMktFilter || "";
 
@@ -1552,10 +1709,10 @@ function renderHistory() {
   const statsCard = document.getElementById("histStatsCard");
   const statsRow  = document.getElementById("histStatsRow");
   if (filt.length && mon && statsCard && statsRow) {
-    const total   = filt.reduce((s,e)=>s+(e.spent||e.cashTotal||0),0);
+    const total   = filt.reduce((s,e)=>s+(e.spent||e.cashTotal||0)+(e.cardTotal||0),0);
     const avg     = Math.round(total / filt.length);
     const mktMap  = {};
-    filt.forEach(e=>{ mktMap[e.market]=(mktMap[e.market]||0)+(e.spent||e.cashTotal||0); });
+    filt.forEach(e=>{ mktMap[e.market]=(mktMap[e.market]||0)+(e.spent||e.cashTotal||0)+(e.cardTotal||0); });
     const topMkt  = Object.entries(mktMap).sort((a,b)=>b[1]-a[1])[0];
     statsCard.style.display = "";
     statsRow.innerHTML = `
@@ -1580,9 +1737,8 @@ function renderHistory() {
       <div class="hist-day-hdr"><span>📅 ${fmtD(day)}</span><span>${fmt(dt)} сўм</span></div>
       ${es.map((e,ei)=>{
         const entryId = `hentry-${day}-${ei}`;
-        const histArr = JSON.parse(localStorage.getItem("bz_history")||"[]");
-        const realIdx = histArr.findIndex(h => h === e || (h.fbKey && h.fbKey === e.fbKey) || (h.date === e.date && h.time === e.time && h.market === e.market));
-        if (realIdx < 0) return ""; // Topilmasa skip
+        const realIdx = h.indexOf(e);
+        if (realIdx < 0) return "";
         const cashItemsArr = e.cashItems||[];
         const cardItemsArr = e.cardItems||[];
         const totalItems = cashItemsArr.length + cardItemsArr.length;
@@ -1596,7 +1752,6 @@ function renderHistory() {
             <span style="color:var(--text)">💳 ${esc(i.name)}${i.kg?` ${i.kg}кг`:""}${i.unitPrice?` (${fmt(i.unitPrice)})`:""}</span>
             <span style="color:var(--purple);font-weight:600">${fmt(i.totalPrice)} сўм</span>
           </div>`).join("");
-        const tgReport = buildEntryReport(e);
         const cashBal  = e.cashBalance ?? e.kassa ?? 0;
         const cardBal  = e.cardBalance ?? 0;
         const cashSpent = e.spent ?? e.cashTotal ?? 0;
@@ -1604,7 +1759,8 @@ function renderHistory() {
         const cashLeft  = e.balance ?? e.remain ?? 0;
         const cardLeft  = cardBal - cardSpent;
         const totalBal  = cashBal + cardBal;
-        const totalLeft = cashLeft + (cardBal > 0 ? cardLeft : 0);
+        const totalSpent = cashSpent + cardSpent;
+        const totalLeft = totalBal - totalSpent;
         return `<div class="hist-entry" data-idx="${realIdx}">
           <div class="hist-top">
             <span class="hist-mkt">📍 ${esc(e.market)}</span>
@@ -1638,7 +1794,7 @@ function renderHistory() {
             </div>`:`<div></div>`}
           </div>
 
-          ${(cardBal>0)?`<div style="background:var(--bg);border-radius:8px;padding:6px 10px;font-size:.76rem;display:flex;justify-content:space-between;margin-bottom:4px">
+          ${(cardBal>0 || cardSpent>0)?`<div style="background:var(--bg);border-radius:8px;padding:6px 10px;font-size:.76rem;display:flex;justify-content:space-between;margin-bottom:4px">
             <span style="color:var(--text2)">📊 Умумий касса: <b style="color:var(--text)">${fmt(totalBal)} сўм</b></span>
             <span style="color:var(--text2)">Жами қолди: <b style="color:var(--green)">${fmt(totalLeft)} сўм</b></span>
           </div>`:""}
@@ -1646,8 +1802,8 @@ function renderHistory() {
           ${e.note?`<div class="hist-note">📝 ${esc(e.note)}</div>`:""}
           <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
             ${totalItems?`<button onclick="toggleHistItems('${entryId}')" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--blue-bg);color:var(--blue);font-family:inherit" id="btn-${entryId}">📋 ${totalItems} та товар</button>`:""}
-            <button onclick="resendEntryTG(${JSON.stringify(tgReport).replace(/"/g,'&quot;')})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
-            <button onclick="editHistMarket('${day}',${ei})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Точка</button>
+            <button onclick="resendEntryTGByIndex(${realIdx})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);font-family:inherit">✈️ TG</button>
+            <button onclick="editHistMarketByIndex(${realIdx})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--orange-bg);color:var(--orange);font-family:inherit">✏️ Точка</button>
             <button onclick="editHistEntry(${realIdx})" style="padding:4px 11px;border-radius:99px;border:none;font-size:.72rem;font-weight:600;cursor:pointer;background:var(--green-bg);color:var(--green);font-family:inherit">✏️ Таҳрир</button>
           </div>
           ${totalItems?`<div id="${entryId}" style="display:none;margin-top:6px;border-radius:var(--radius-xs);background:var(--bg);padding:6px 10px">${cashHtml}${cardHtml}</div>`:""}
@@ -1668,19 +1824,11 @@ function toggleHistItems(id) {
   if (btn) btn.style.color = open ? "var(--blue)" : "var(--green)";
 }
 
-function editHistMarket(day, idx) {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  // day + idx бўйича entry топамиз
-  const grps = {};
-  h.forEach((e, i) => {
-    const d = e.date || "";
-    if (!grps[d]) grps[d] = [];
-    grps[d].push({ e, i });
-  });
-  if (!grps[day] || !grps[day][idx]) return;
-
-  const { e, i: realIdx } = grps[day][idx];
-  const markets = JSON.parse(localStorage.getItem("bz_markets") || '["Куйлик","Фут Сити","Эко","Бошқа"]');
+function editHistMarketByIndex(realIdx) {
+  const h = safeGetJSON("bz_history", []);
+  const e = h[realIdx];
+  if (!e) return;
+  const markets = safeGetJSON("bz_markets", ["Куйлик","Фут Сити","Эко","Бошқа"]);
   
   // Modal яратамиз
   let existing = document.getElementById("editMarketModal");
@@ -1709,13 +1857,25 @@ function editHistMarket(day, idx) {
         style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer;font-family:inherit">Бекор қилиш</button>
     </div>`;
   document.body.appendChild(modal);
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener("click", ev => { if (ev.target === modal) modal.remove(); });
+}
+
+function editHistMarket(day, idx) {
+  const h = safeGetJSON("bz_history", []);
+  const grps = {};
+  h.forEach((e, i) => {
+    const d = e.date || "";
+    if (!grps[d]) grps[d] = [];
+    grps[d].push({ e, i });
+  });
+  if (!grps[day] || !grps[day][idx]) return;
+  editHistMarketByIndex(grps[day][idx].i);
 }
 
 function confirmEditMarket(idx, newMarket, btn) {
   newMarket = (newMarket || "").trim();
   if (!newMarket) { showToast("⚠️ Точка номини киритинг"); return; }
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   if (!h[idx]) return;
   const old = h[idx].market;
   h[idx].market = newMarket;
@@ -1725,12 +1885,11 @@ function confirmEditMarket(idx, newMarket, btn) {
   showToast(`✅ ${old} → ${newMarket}`);
 }
 
-
 /* ══════════════════════════════════════════
    ✏️ ТАРИХ ЁЗУВИНИ ТО'ЛИҚ ТАҲРИРЛАШ
 ══════════════════════════════════════════ */
 function editHistEntry(idx) {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   if (!h[idx]) return;
   const e = h[idx];
 
@@ -1742,7 +1901,7 @@ function editHistEntry(idx) {
       <div style="font-size:.72rem;color:var(--text2);margin-bottom:4px">💰 Нақд товар ${i+1}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <input class="field" style="flex:2;min-width:100px" placeholder="Товар номи" id="c-name-${i}" value="${esc(item.name||'')}"/>
-        <input class="field" style="flex:1;min-width:70px" type="number" placeholder="кг" id="c-kg-${i}" value="${item.kg||''}"/>
+        <input class="field" style="flex:1;min-width:70px" type="number" step="any" placeholder="кг" id="c-kg-${i}" value="${item.kg||''}"/>
         <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Нарх" id="c-price-${i}" value="${item.unitPrice||''}"/>
         <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Жами" id="c-total-${i}" value="${item.totalPrice||''}"/>
       </div>
@@ -1753,7 +1912,7 @@ function editHistEntry(idx) {
       <div style="font-size:.72rem;color:var(--text2);margin-bottom:4px">💳 Карта товар ${i+1}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <input class="field" style="flex:2;min-width:100px" placeholder="Товар номи" id="d-name-${i}" value="${esc(item.name||'')}"/>
-        <input class="field" style="flex:1;min-width:70px" type="number" placeholder="кг" id="d-kg-${i}" value="${item.kg||''}"/>
+        <input class="field" style="flex:1;min-width:70px" type="number" step="any" placeholder="кг" id="d-kg-${i}" value="${item.kg||''}"/>
         <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Нарх" id="d-price-${i}" value="${item.unitPrice||''}"/>
         <input class="field" style="flex:1;min-width:80px" type="number" placeholder="Жами" id="d-total-${i}" value="${item.totalPrice||''}"/>
       </div>
@@ -1786,7 +1945,7 @@ function editHistEntry(idx) {
 }
 
 function saveHistEntry(idx) {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   if (!h[idx]) return;
   const e = h[idx];
 
@@ -1822,6 +1981,7 @@ function saveHistEntry(idx) {
   e.cashTotal = (e.cashItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
   e.cardTotal = (e.cardItems||[]).reduce((s,i)=>s+(i.totalPrice||0),0);
   e.spent     = e.cashTotal;
+  e.balance   = (e.cashBalance ?? 0) - e.cashTotal;
 
   h[idx] = e;
   localStorage.setItem("bz_history", JSON.stringify(h));
@@ -1871,8 +2031,13 @@ function resendEntryTG(text) {
     .catch(()=>showToast("⚠️ Телеграм хатолик"));
 }
 function clearHistory() {
-  if(!confirm("Барча тарих ўчирилсинми?")) return;
-  localStorage.removeItem("bz_history"); renderHistory();
+  if(!confirm("Барча тарих ўчирилсинми?")) return false;
+  localStorage.removeItem("bz_history");
+  renderHistory();
+  updateDashboard();
+  updateStats();
+  showToast("🗑️ Тарих тозаланди");
+  return true;
 }
 
 /* ── CHARTS ── */
@@ -1883,13 +2048,25 @@ function setPeriod(p) {
   updateCharts();
 }
 function filteredHist() {
-  const h = JSON.parse(localStorage.getItem("bz_history")||"[]");
+  const h = safeGetJSON("bz_history", []);
   const now = new Date();
-  if (period==="week") { const wa=new Date(now-7*86400000).toISOString().split("T")[0]; return h.filter(e=>e.date>=wa); }
-  if (period==="month"){ const m=now.toISOString().slice(0,7); return h.filter(e=>e.date&&e.date.startsWith(m)); }
+  if (period==="week") {
+    const wa = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    const waStr = `${wa.getFullYear()}-${String(wa.getMonth()+1).padStart(2,"0")}-${String(wa.getDate()).padStart(2,"0")}`;
+    return h.filter(e=>e.date>=waStr);
+  }
+  if (period==="month"){
+    const m = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    return h.filter(e=>e.date&&e.date.startsWith(m));
+  }
   return h;
 }
 function updateCharts() {
+  if (typeof Chart === "undefined") return;
+  const barCanvas = document.getElementById("barChart");
+  const pieCanvas = document.getElementById("pieChart");
+  if (!barCanvas || !pieCanvas) return;
+
   const hist = filteredHist();
   const isDark = document.body.classList.contains("dark");
   const tc = isDark ? "#94a3b8" : "#6b7280";
@@ -1897,11 +2074,11 @@ function updateCharts() {
   const cb = isDark ? "#1c1f26" : "#ffffff";
 
   const byDay = {};
-  hist.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+(e.spent||e.cashTotal||0); });
+  hist.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+(e.spent||e.cashTotal||0)+(e.cardTotal||0); });
   const days = Object.keys(byDay).sort();
 
   if (barInst) barInst.destroy();
-  barInst = new Chart(document.getElementById("barChart").getContext("2d"), {
+  barInst = new Chart(barCanvas.getContext("2d"), {
     type:"bar",
     data:{
       labels: days.map(d=>fmtD(d)),
@@ -1913,16 +2090,22 @@ function updateCharts() {
   });
 
   const byMkt = {};
-  hist.forEach(e=>{ byMkt[e.market]=(byMkt[e.market]||0)+(e.spent||e.cashTotal||0); });
+  hist.forEach(e=>{
+    const m = e.market || "Бошқа";
+    byMkt[m]=(byMkt[m]||0)+(e.spent||e.cashTotal||0)+(e.cardTotal||0);
+  });
   const mkts = Object.keys(byMkt);
   if (pieInst) pieInst.destroy();
   if (!mkts.length) return;
-  pieInst = new Chart(document.getElementById("pieChart").getContext("2d"), {
+  const palette = ["#2563eb","#16a34a","#ea580c","#7c3aed","#dc2626","#0891b2","#f59e0b","#10b981","#6366f1","#ec4899"];
+  const mktColors = mkts.map((_, i) => palette[i % palette.length]);
+
+  pieInst = new Chart(pieCanvas.getContext("2d"), {
     type:"doughnut",
     data:{
       labels:mkts,
       datasets:[{ data:mkts.map(m=>byMkt[m]),
-        backgroundColor:["#2563eb","#16a34a","#ea580c","#7c3aed","#dc2626","#0891b2"],
+        backgroundColor: mktColors,
         borderWidth:3, borderColor:cb }]
     },
     options:{ responsive:true, plugins:{
@@ -1943,7 +2126,7 @@ function showToast(msg) {
    📌 ШАБЛОНЛАР — тез-тез харид товарлар
 ══════════════════════════════════════════ */
 function getTemplates() {
-  return JSON.parse(localStorage.getItem("bz_templates") || "[]");
+  return safeGetJSON("bz_templates", []);
 }
 function saveTemplates(arr) {
   localStorage.setItem("bz_templates", JSON.stringify(arr));
@@ -1954,7 +2137,7 @@ function addTemplate() {
   const p = parse(val);
   if (!p) { showToast("⚠️ Формат тўғри эмас"); return; }
   const templates = getTemplates();
-  if (templates.find(t => t.name === p.name)) { showToast("⚠️ Бу шаблон аллақачон бор"); return; }
+  if (templates.find(t => t.name.toLowerCase() === p.name.toLowerCase())) { showToast("⚠️ Бу шаблон аллақачон бор"); return; }
   templates.push({ name: p.name, kg: p.kg, unitPrice: p.unitPrice, totalPrice: p.totalPrice, raw: val });
   saveTemplates(templates);
   renderTemplates();
@@ -1962,6 +2145,14 @@ function addTemplate() {
 }
 function useTemplate(raw) {
   document.getElementById("cashInp").value = raw;
+  document.getElementById("cashInp").focus();
+  showToast("✏️ Нархни янгилаб + босинг");
+}
+function useTemplateByIndex(i) {
+  const templates = getTemplates();
+  const t = templates[i];
+  if (!t) return;
+  document.getElementById("cashInp").value = t.raw || (t.kg && t.unitPrice ? `${t.name} ${t.kg}кг (${t.unitPrice}) ${t.totalPrice}` : `${t.name} ${t.totalPrice}`);
   document.getElementById("cashInp").focus();
   showToast("✏️ Нархни янгилаб + босинг");
 }
@@ -1980,7 +2171,7 @@ function renderTemplates() {
     return;
   }
   cont.innerHTML = templates.map((t, i) => `
-    <div class="template-item" onclick="useTemplate('${t.raw.replace(/'/g,"\\'")}')">
+    <div class="template-item" onclick="useTemplateByIndex(${i})">
       <span class="tmpl-name">${esc(t.name)}${t.kg ? ` ${t.kg}кг` : ""}</span>
       <span class="tmpl-price">${fmt(t.totalPrice)} сўм</span>
       <button class="row-btn" onclick="event.stopPropagation();deleteTemplate(${i})" style="margin-left:6px">✕</button>
@@ -1993,14 +2184,18 @@ function renderTemplates() {
 let priceChartInst = null;
 
 function buildPriceHistory() {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const map = {};
   h.forEach(entry => {
     const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
     allItems.forEach(it => {
+      if (!it || !it.name) return;
       const key = it.name.trim();
       if (!map[key]) map[key] = [];
-      map[key].push({ date: entry.date, price: it.unitPrice || it.totalPrice });
+      const itPrice = it.unitPrice || it.totalPrice;
+      if (itPrice) {
+        map[key].push({ date: entry.date, price: itPrice });
+      }
     });
   });
   return map;
@@ -2011,6 +2206,9 @@ function renderPriceHistory() {
   const map = buildPriceHistory();
   const keys = Object.keys(map).sort();
   if (!keys.length) { 
+    if (priceChartInst) { priceChartInst.destroy(); priceChartInst = null; }
+    const infoEl = document.getElementById("priceChangeInfo");
+    if (infoEl) infoEl.innerHTML = `<span style="color:var(--text2)">Тарих йўқ</span>`;
     sel.innerHTML = `<option>Тарих йўқ</option>`; 
     return; 
   }
@@ -2025,7 +2223,7 @@ function onPriceItemChange() {
 }
 
 function drawPriceChart(name, map) {
-  const data = (map[name] || []).sort((a, b) => a.date.localeCompare(b.date));
+  const data = (map[name] || []).sort((a, b) => (a.date||"").localeCompare(b.date||""));
   const isDark = document.body.classList.contains("dark");
   const tc = isDark ? "#94a3b8" : "#6b7280";
   const gc = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
@@ -2043,7 +2241,10 @@ function drawPriceChart(name, map) {
   }
 
   if (priceChartInst) priceChartInst.destroy();
-  priceChartInst = new Chart(document.getElementById("priceLineChart").getContext("2d"), {
+  if (typeof Chart === "undefined") return;
+  const canvas = document.getElementById("priceLineChart");
+  if (!canvas) return;
+  priceChartInst = new Chart(canvas.getContext("2d"), {
     type: "line",
     data: {
       labels: data.map(d => fmtD(d.date)),
@@ -2062,13 +2263,16 @@ function drawPriceChart(name, map) {
    🏆 ЭНГ КЎП ХАРАЖАТ (товар + бозор)
 ══════════════════════════════════════════ */
 function renderTopExpenses() {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const itemMap = {}, mktMap = {};
   h.forEach(entry => {
-    mktMap[entry.market] = (mktMap[entry.market] || 0) + (entry.spent || entry.cashTotal || 0) + (entry.cardTotal || 0);
+    const m = entry.market || "Бошқа";
+    mktMap[m] = (mktMap[m] || 0) + (entry.spent || entry.cashTotal || 0) + (entry.cardTotal || 0);
     const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
     allItems.forEach(it => {
-      itemMap[it.name] = (itemMap[it.name] || 0) + it.totalPrice;
+      if (!it || !it.name) return;
+      const p = +it.totalPrice || 0;
+      itemMap[it.name] = (itemMap[it.name] || 0) + p;
     });
   });
 
@@ -2085,7 +2289,7 @@ function renderTopExpenses() {
   } else {
     itemEl.innerHTML = topItems.map(([name, sum], i) => `
       <div class="top-row">
-        <span class="top-rank">${["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"][i]}</span>
+        <span class="top-rank">${["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"][i]||"·"}</span>
         <div style="flex:1">
           <div class="top-name">${esc(name)}</div>
           <div class="top-bar-wrap"><div class="top-bar" style="width:${(sum/maxItem*100).toFixed(1)}%"></div></div>
@@ -2113,8 +2317,10 @@ function renderTopExpenses() {
    📥 CSV ЭКСПОРТ
 ══════════════════════════════════════════ */
 function exportCSV() {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  const debts = JSON.parse(localStorage.getItem("bz_debts") || "[]");
+  const h = safeGetJSON("bz_history", []);
+  const debts = safeGetJSON("bz_debts", []);
+
+  const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
   let csv = "\uFEFF";
   csv += "ЗАКУПКА ТАРИХИ\n";
@@ -2123,25 +2329,23 @@ function exportCSV() {
     const cashItemsStr = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [нақд]").join(" | ");
     const cardItemsStr = (e.cardItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [карта]").join(" | ");
     const allItems = [cashItemsStr, cardItemsStr].filter(Boolean).join(" | ");
-    csv += [e.date, e.time || "", e.market, e.cashBalance || 0, e.cashTotal || e.spent || 0, e.cardTotal || 0, e.balance || 0, `"${allItems}"`, `"${(e.note||"").replace(/"/g,'""')}"`].join(",") + "\n";
+    csv += [cell(e.date), cell(e.time), cell(e.market), e.cashBalance || 0, e.cashTotal || e.spent || 0, e.cardTotal || 0, e.balance || 0, cell(allItems), cell(e.note)].join(",") + "\n";
   });
 
   csv += "\nҚАРЗЛАР\n";
   csv += "Сана,Ким,Точка,Товар,кг,Нарх,Жами (сўм)\n";
   debts.forEach(d => {
-    csv += [d.date, d.who || "", d.market || "", d.name, d.kg || "", d.unitPrice || "", d.totalPrice].join(",") + "\n";
+    csv += [cell(d.date), cell(d.who), cell(d.market), cell(d.name), d.kg || "", d.unitPrice || "", d.totalPrice || 0].join(",") + "\n";
   });
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
-  const date = new Date().toISOString().slice(0,10);
+  const date = today();
   a.href = url; a.download = `bozorlik_${date}.csv`;
   a.click(); URL.revokeObjectURL(url);
   showToast("📥 CSV юклаб олинди!");
 }
-
-
 
 /* ══════════════════════════════════════════
    💾 JSON EXPORT / IMPORT — Backup & Restore
@@ -2152,9 +2356,9 @@ function exportJSON() {
   const data = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    history:   JSON.parse(localStorage.getItem("bz_history")   || "[]"),
-    debts:     JSON.parse(localStorage.getItem("bz_debts")     || "[]"),
-    templates: JSON.parse(localStorage.getItem("bz_templates") || "[]"),
+    history:   safeGetJSON("bz_history",   []),
+    debts:     safeGetJSON("bz_debts",     []),
+    templates: safeGetJSON("bz_templates", []),
     cashBalance: getCashBalance(),
     cardBalance: getCardBalance(),
     tgToken:   localStorage.getItem("bz_tg_token") || "",
@@ -2163,7 +2367,7 @@ function exportJSON() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = today();
   a.href = url; a.download = `bozorlik_backup_${date}.json`;
   a.click(); URL.revokeObjectURL(url);
   showToast("💾 Backup юклаб олинди!");
@@ -2183,9 +2387,9 @@ function importJSON() {
         if (!data.version) throw new Error("Нотўғри файл формати");
 
         const existing = {
-          history:   JSON.parse(localStorage.getItem("bz_history")   || "[]"),
-          debts:     JSON.parse(localStorage.getItem("bz_debts")     || "[]"),
-          templates: JSON.parse(localStorage.getItem("bz_templates") || "[]"),
+          history:   safeGetJSON("bz_history",   []),
+          debts:     safeGetJSON("bz_debts",     []),
+          templates: safeGetJSON("bz_templates", []),
         };
 
         // Тарихни бирлаштириш (дубликатсиз)
@@ -2210,12 +2414,17 @@ function importJSON() {
         localStorage.setItem("bz_history",   JSON.stringify(mergedHistory));
         localStorage.setItem("bz_debts",     JSON.stringify(mergedDebts));
         localStorage.setItem("bz_templates", JSON.stringify(mergedTmpl));
-        if (data.cashBalance) setCashBalance(data.cashBalance);
-        if (data.cardBalance) setCardBalance(data.cardBalance);
+        if (data.cashBalance != null) setCashBalance(data.cashBalance);
+        if (data.cardBalance != null) setCardBalance(data.cardBalance);
         if (data.tgToken) localStorage.setItem("bz_tg_token", data.tgToken);
         if (data.tgChat)  localStorage.setItem("bz_tg_chat",  data.tgChat);
 
-        renderTemplates(); renderAllDebts(); loadAllDebts(); updateStats();
+        const incEl = document.getElementById("income");
+        if (incEl) incEl.value = fmt(getCashBalance()) + " сўм";
+        const cardIncEl = document.getElementById("cardIncome");
+        if (cardIncEl) cardIncEl.value = fmt(getCardBalance()) + " сўм";
+
+        renderTemplates(); loadAllDebts(); renderAllDebts(); updateStats();
         updateTgPill(); renderHistory();
         showToast(`✅ Тикланди! Тарих: +${mergedHistory.length - existing.history.length} та, Қарз: +${mergedDebts.length - existing.debts.length} та`);
       } catch(err) {
@@ -2306,19 +2515,20 @@ function initNotifications() {
 let monthCompareChartInst = null;
 
 function renderMonthCompare() {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h = safeGetJSON("bz_history", []);
   const monthMap = {};
 
   h.forEach(entry => {
     const ym = (entry.date || "").slice(0, 7); // "2025-05"
     if (!ym) return;
-    monthMap[ym] = (monthMap[ym] || 0) + (entry.cashTotal || entry.spent || 0);
+    monthMap[ym] = (monthMap[ym] || 0) + (entry.cashTotal || entry.spent || 0) + (entry.cardTotal || 0);
   });
 
   const months = Object.keys(monthMap).sort();
   const infoEl = document.getElementById("monthCompareInfo");
 
   if (months.length < 2) {
+    if (monthCompareChartInst) { monthCompareChartInst.destroy(); monthCompareChartInst = null; }
     if (infoEl) infoEl.innerHTML = `<span style="color:var(--text2)">Солиштириш учун камида 2 ой тарих керак</span>`;
     return;
   }
@@ -2342,6 +2552,7 @@ function renderMonthCompare() {
   const gc = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
 
   if (monthCompareChartInst) monthCompareChartInst.destroy();
+  if (typeof Chart === "undefined") return;
   const ctx = document.getElementById("monthCompareChart");
   if (!ctx) return;
 
@@ -2448,7 +2659,7 @@ async function shareReceipt() {
     await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: tgChat, text, parse_mode: "HTML" })
+      body: JSON.stringify({ chat_id: tgChat, text })
     });
     showToast("✈️ Чек Телеграмга юборилди!");
     closeReceiptModal();
@@ -2464,7 +2675,7 @@ async function shareReceipt() {
 function updateDashboard() {
   const kassa = getCashBalance();
   const card  = getCardBalance();
-  const h     = JSON.parse(localStorage.getItem("bz_history") || "[]");
+  const h     = safeGetJSON("bz_history", []);
 
   // Бугунги умумий расход (нақд + карта)
   const todayStr   = today();
@@ -2642,10 +2853,10 @@ function animateItemRemove(itemEl, cb) {
    📬 ҲАФТАЛИК / ОЙЛИК ҲИСОБОТ → TG
 ══════════════════════════════════════════ */
 function buildReport(days, label) {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  const cutStr = cutoff.toISOString().slice(0, 10);
+  const h = safeGetJSON("bz_history", []);
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const cutStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
 
   const period = h.filter(e => (e.date || "") >= cutStr);
   if (!period.length) return null;
@@ -2686,23 +2897,19 @@ async function sendWeeklyReport() {
   const txt = buildReport(7, "ҲАФТАЛИК");
   if (!txt) { showToast("⚠️ Ҳафтада маълумот йўқ"); return; }
   await sendTGText(txt);
-  const gsData = buildReportData(7);
-  if (gsData) { gsData.type = "weekly_report"; }
 }
 
 async function sendMonthlyReport() {
   const txt = buildReport(30, "ОЙЛИК");
   if (!txt) { showToast("⚠️ Ойда маълумот йўқ"); return; }
   await sendTGText(txt);
-  const gsData = buildReportData(30);
-  if (gsData) { gsData.type = "monthly_report"; }
 }
 
 function buildReportData(days) {
-  const h = JSON.parse(localStorage.getItem("bz_history") || "[]");
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  const cutStr = cutoff.toISOString().slice(0, 10);
+  const h = safeGetJSON("bz_history", []);
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const cutStr = toLocalDateStr(cutoff);
   const period = h.filter(e => (e.date || "") >= cutStr);
   if (!period.length) return null;
   const total = period.reduce((s, e) => s + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0), 0);
@@ -2744,8 +2951,10 @@ async function sendTGText(text) {
 document.addEventListener("DOMContentLoaded", () => {
   initDark();
   updateTgPill();
-  document.getElementById("debtDate").value = today();
-  document.getElementById("histMonth").value = new Date().toISOString().slice(0,7);
+  const debtDateEl = document.getElementById("debtDate");
+  if (debtDateEl) debtDateEl.value = today();
+  const histMonthEl = document.getElementById("histMonth");
+  if (histMonthEl) histMonthEl.value = today().slice(0, 7);
   renderCash();
   renderTemplates();
   loadAllDebts();
@@ -2783,6 +2992,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // GPS bozor rejimi
   bzLoadMarketGeo();
   bzStartGps();
+  bzInitMarketLongPress();
   // Narx tarixi hint
   setTimeout(bzAttachPriceHints, 500);
   // Hisobot scheduler
