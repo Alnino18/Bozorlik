@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>BOZORLIK</title>
-  <link rel="stylesheet" href="style.css?v=4"/>
+  <link rel="stylesheet" href="style.css?v=5"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="apple-touch-startup-image" href="splash.png"/>
@@ -243,6 +243,14 @@
         <input type="month" id="histMonth" class="field" onchange="renderHistory()" style="margin-bottom:0"/>
         <button class="sm-danger-btn" onclick="clearHistory()">🗑</button>
       </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button onclick="openReportModal('month')" style="flex:1;padding:8px 10px;background:var(--blue-bg);color:var(--blue);border:none;border-radius:8px;font-weight:600;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit">
+          📄 PDF ҳисобот
+        </button>
+        <button onclick="exportCSV('month')" style="flex:1;padding:8px 10px;background:var(--green-bg);color:var(--green);border:none;border-radius:8px;font-weight:600;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit">
+          📊 Excel (CSV)
+        </button>
+      </div>
       <div id="histMarketFilter" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
 
@@ -341,17 +349,56 @@
       </p>
     </div>
 
-    <!-- CSV ЭКСПОРТ -->
+    <!-- ҲИСОБОТ ЭКСПОРТ (PDF / EXCEL) -->
     <div class="card" style="text-align:center">
-      <p class="card-title">📥 CSV Экспорт (Excel учун)</p>
-      <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">Барча тарих ва қарзларни Excel да очиладиган форматда юклаш</p>
-      <button class="finish-btn" onclick="exportCSV()" style="margin:0 auto;max-width:280px">📥 CSV юклаб олиш</button>
+      <p class="card-title">📑 Ҳисоботларни экспорт қилиш</p>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px">Барча харажатлар ва қарзларни PDF ёки Excel да сақлаш</p>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:300px;margin:0 auto">
+        <button class="finish-btn" onclick="openReportModal('month')" style="background:var(--blue);color:#fff">
+          📄 PDF ҳисобот (Chop etish / Saqlash)
+        </button>
+        <button class="finish-btn" onclick="exportCSV('month')" style="background:var(--green);color:#fff">
+          📊 Excel (CSV) — Шу ойлик
+        </button>
+        <button class="finish-btn" onclick="exportCSV('all')" style="background:var(--bg);color:var(--text);border:1px solid var(--border)">
+          📁 Excel (CSV) — Барча тарих
+        </button>
+      </div>
     </div>
 
     <div style="height:80px"></div>
   </div>
 
 </main>
+
+<!-- REPORT EXPORT MODAL (PDF / EXCEL) -->
+<div class="modal-bg" id="reportModal" onclick="closeReportModal(event)">
+  <div class="modal-box report-modal-box" style="max-width:540px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.3rem">📑</span>
+        <h3 style="margin:0;font-size:1.05rem;font-weight:700">Молиявий ҳисобот</h3>
+      </div>
+      <button onclick="closeReportModal()" style="border:none;background:var(--bg);width:32px;height:32px;border-radius:50%;font-size:1rem;cursor:pointer;color:var(--text2)">✕</button>
+    </div>
+    
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="repBtnMonth" class="filter-chip active" onclick="switchReportScope('month')" style="flex:1;padding:8px">Шу ой</button>
+      <button id="repBtnAll" class="filter-chip" onclick="switchReportScope('all')" style="flex:1;padding:8px">Барча тарих</button>
+    </div>
+
+    <div id="reportContent" class="report-content" style="background:var(--bg);border-radius:12px;padding:12px;font-size:.85rem"></div>
+
+    <div class="modal-btns" style="margin-top:14px;grid-template-columns:1fr 1fr">
+      <button class="modal-save" onclick="triggerPrintReport()" style="background:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px">
+        <span>🖨️</span> PDF / Чоп этиш
+      </button>
+      <button class="modal-save" onclick="exportCSV(currentReportScope)" style="background:var(--green);display:flex;align-items:center;justify-content:center;gap:6px">
+        <span>📊</span> Excel (CSV)
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- RECEIPT MODAL -->
 <div class="modal-bg" id="receiptModal" onclick="closeReceiptModal(event)">
@@ -431,6 +478,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="firebase.js?v=3"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

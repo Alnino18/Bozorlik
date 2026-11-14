@@ -839,4 +839,32 @@ body.dark .h-btn.ai-pill {
 }
 .ai-input-bar .field { margin-bottom: 0; flex: 1; }
 
+/* ── REPORT EXPORT MODAL & PRINT STYLES ── */
+.report-modal-box {
+  max-width: 520px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+.report-content {
+  overflow-y: auto;
+  flex: 1;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  header, .bottom-nav, #splash, .h-actions, .filter-row, .modal-btns, .ai-pill, #toast, #aiAgentModal, #tgModal, #quickModal, #editModal, #receiptModal, #cameraAiModal {
+    display: none !important;
+  }
+  .report-modal-box {
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+}
+
 

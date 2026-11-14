@@ -2344,26 +2344,265 @@ function renderTopExpenses() {
 }
 
 /* ══════════════════════════════════════════
-   📥 CSV ЭКСПОРТ
+   📑 ҲИСОБОТ ЭКСПОРТ (PDF & EXCEL)
 ══════════════════════════════════════════ */
-function exportCSV() {
+let currentReportScope = "month";
+
+function openReportModal(scope = "month") {
+  currentReportScope = scope;
+  renderReportContent(scope);
+  const modal = document.getElementById("reportModal");
+  if (modal) modal.classList.add("open");
+}
+
+function closeReportModal(e) {
+  if (!e || e.target === document.getElementById("reportModal") || e.currentTarget === e.target) {
+    const modal = document.getElementById("reportModal");
+    if (modal) modal.classList.remove("open");
+  }
+}
+
+function switchReportScope(scope) {
+  currentReportScope = scope;
+  const btnMonth = document.getElementById("repBtnMonth");
+  const btnAll = document.getElementById("repBtnAll");
+  if (btnMonth) btnMonth.classList.toggle("active", scope === "month");
+  if (btnAll) btnAll.classList.toggle("active", scope === "all");
+  renderReportContent(scope);
+}
+
+function renderReportContent(scope) {
   const h = safeGetJSON("bz_history", []);
   const debts = safeGetJSON("bz_debts", []);
+  const monthInput = document.getElementById("histMonth");
+  const targetMonth = monthInput?.value || today().slice(0, 7);
+
+  const filtered = scope === "month" 
+    ? h.filter(e => (e.date || "").startsWith(targetMonth))
+    : h;
+
+  const totalSpent = filtered.reduce((s, e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
+  const totalDebts = debts.reduce((s, d) => s + (d.totalPrice || 0), 0);
+  const count = filtered.length;
+  const periodLabel = scope === "month" ? targetMonth + " ойи" : "Барча давр";
+
+  let html = `
+    <div style="border-bottom:1px dashed var(--border);padding-bottom:10px;margin-bottom:12px;text-align:center">
+      <div style="font-weight:800;font-size:1.1rem;letter-spacing:-.3px">🛒 BOZORLIK ҲИСОБОТИ</div>
+      <div style="color:var(--text2);font-size:.76rem;margin-top:2px">Давр: <b>${periodLabel}</b> · Шахсий харажатлар</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--surface);padding:10px;border-radius:10px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:.7rem;color:var(--text2)">Жами харажат</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--orange)">${fmt(totalSpent)} сўм</div>
+      </div>
+      <div style="background:var(--surface);padding:10px;border-radius:10px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:.7rem;color:var(--text2)">Бозор сафарлари</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--blue)">${count} та</div>
+      </div>
+      <div style="background:var(--surface);padding:10px;border-radius:10px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:.7rem;color:var(--text2)">Фаол қарзлар</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--red)">${fmt(totalDebts)} сўм</div>
+      </div>
+      <div style="background:var(--surface);padding:10px;border-radius:10px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:.7rem;color:var(--text2)">Қарзлар сони</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">${debts.length} та</div>
+      </div>
+    </div>
+  `;
+
+  if (filtered.length) {
+    html += `<div style="font-weight:700;margin-bottom:6px;font-size:.82rem">📅 Харидлар рўйхати (${filtered.length} та):</div>`;
+    html += `<div style="max-height:190px;overflow-y:auto;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">`;
+    html += `<table style="width:100%;border-collapse:collapse;font-size:.74rem">
+      <thead>
+        <tr style="background:var(--bg);text-align:left;border-bottom:1px solid var(--border)">
+          <th style="padding:6px">Сана</th>
+          <th style="padding:6px">Бозор</th>
+          <th style="padding:6px;text-align:right">Харажат</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    filtered.forEach(e => {
+      const sp = (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0);
+      html += `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px;white-space:nowrap">${e.date}</td>
+          <td style="padding:6px">${esc(e.market || "—")}</td>
+          <td style="padding:6px;text-align:right;font-weight:600;color:var(--text)">${fmt(sp)} сўм</td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  } else {
+    html += `<div style="color:var(--text2);text-align:center;padding:14px;background:var(--surface);border-radius:8px">Бу даврда харидлар топилмади</div>`;
+  }
+
+  const el = document.getElementById("reportContent");
+  if (el) el.innerHTML = html;
+}
+
+function triggerPrintReport() {
+  const h = safeGetJSON("bz_history", []);
+  const debts = safeGetJSON("bz_debts", []);
+  const monthInput = document.getElementById("histMonth");
+  const targetMonth = monthInput?.value || today().slice(0, 7);
+
+  const filtered = currentReportScope === "month" 
+    ? h.filter(e => (e.date || "").startsWith(targetMonth))
+    : h;
+
+  const totalSpent = filtered.reduce((s, e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
+  const totalDebts = debts.reduce((s, d) => s + (d.totalPrice || 0), 0);
+  const periodLabel = currentReportScope === "month" ? targetMonth + " ойи" : "Барча давр";
+
+  const rowsHtml = filtered.map((e, idx) => {
+    const sp = (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0);
+    const items = [...(e.cashItems||[]), ...(e.cardItems||[])]
+      .map(i => `${i.name}${i.kg ? " ("+i.kg+"кг)" : ""} - ${fmt(i.totalPrice)} сўм`)
+      .join(", ");
+    return `
+      <tr>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${idx+1}</td>
+        <td style="border:1px solid #ddd;padding:6px;white-space:nowrap">${e.date} ${e.time||""}</td>
+        <td style="border:1px solid #ddd;padding:6px">${e.market||"—"}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:bold">${fmt(sp)} сўм</td>
+        <td style="border:1px solid #ddd;padding:6px;font-size:9pt">${items || "—"}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const debtsHtml = debts.map((d, idx) => `
+    <tr>
+      <td style="border:1px solid #ddd;padding:6px;text-align:center">${idx+1}</td>
+      <td style="border:1px solid #ddd;padding:6px">${d.date}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-weight:bold">${d.who||"—"}</td>
+      <td style="border:1px solid #ddd;padding:6px">${d.name} ${d.kg ? "("+d.kg+"кг)" : ""}</td>
+      <td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:bold;color:#c00">${fmt(d.totalPrice)} сўм</td>
+    </tr>
+  `).join("");
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8"/>
+      <title>Bozorlik Hisoboti - ${periodLabel}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 24px; color: #111; line-height: 1.4; }
+        h1 { margin: 0 0 4px; font-size: 18pt; }
+        h2 { margin: 20px 0 8px; font-size: 13pt; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .summary-box { display: flex; gap: 12px; margin: 16px 0; }
+        .summary-card { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; background: #fafafa; }
+        .summary-num { font-size: 15pt; font-weight: bold; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5pt; }
+        th { background: #f2f2f2; border: 1px solid #ddd; padding: 7px; text-align: left; }
+        @media print {
+          body { margin: 8mm; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom:16px;display:flex;gap:10px">
+        <button onclick="window.print()" style="padding:10px 18px;background:#007aff;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:10pt">🖨️ PDF сифатида сақлаш / Чоп этиш</button>
+        <button onclick="window.close()" style="padding:10px 18px;background:#eee;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:10pt">Ёпиш</button>
+      </div>
+
+      <div style="border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:12px">
+        <h1>🛒 BOZORLIK МОЛИЯВИЙ ҲИСОБОТИ</h1>
+        <div style="color:#555;font-size:10pt">Ҳисобот даври: <b>${periodLabel}</b> | Ҳисобот тузилган вақт: <b>${today()}</b></div>
+      </div>
+
+      <div class="summary-box">
+        <div class="summary-card">
+          <div style="font-size:9pt;color:#666">Жами харажат</div>
+          <div class="summary-num" style="color:#d9534f">${fmt(totalSpent)} сўм</div>
+        </div>
+        <div class="summary-card">
+          <div style="font-size:9pt;color:#666">Бозор сафарлари</div>
+          <div class="summary-num" style="color:#0275d8">${filtered.length} та</div>
+        </div>
+        <div class="summary-card">
+          <div style="font-size:9pt;color:#666">Фаол қарзлар</div>
+          <div class="summary-num" style="color:#f0ad4e">${fmt(totalDebts)} сўм</div>
+        </div>
+      </div>
+
+      <h2>📅 Харидлар ва сафарлар тарихи</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:25px">#</th>
+            <th style="width:110px">Сана ва вақт</th>
+            <th style="width:110px">Бозор / Точка</th>
+            <th style="width:105px;text-align:right">Харажат</th>
+            <th>Харид қилинган товарлар</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || "<tr><td colspan='5' style='text-align:center;padding:12px'>Харидлар йўқ</td></tr>"}
+        </tbody>
+      </table>
+
+      ${debts.length ? `
+        <h2>📋 Фаол қарздорликлар рўйхати</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:25px">#</th>
+              <th style="width:90px">Сана</th>
+              <th style="width:130px">Кимга / Кимдан</th>
+              <th>Товар</th>
+              <th style="width:105px;text-align:right">Сумма</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${debtsHtml}
+          </tbody>
+        </table>
+      ` : ""}
+
+      <div style="margin-top:24px;font-size:8.5pt;color:#888;text-align:right">
+        Bozorlik тизими орқали шакллантирилди.
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+function exportCSV(scope = "month") {
+  const h = safeGetJSON("bz_history", []);
+  const debts = safeGetJSON("bz_debts", []);
+  const monthInput = document.getElementById("histMonth");
+  const targetMonth = monthInput?.value || today().slice(0, 7);
+
+  const filtered = scope === "month" 
+    ? h.filter(e => (e.date || "").startsWith(targetMonth))
+    : h;
 
   const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
   let csv = "\uFEFF";
-  csv += "ЗАКУПКА ТАРИХИ\n";
-  csv += "Сана,Вақт,Точка,Нақд касса,Нақд харажат,Карта харажат,Қолдиқ,Товарлар,Изоҳ\n";
-  h.forEach(e => {
-    const cashItemsStr = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [нақд]").join(" | ");
-    const cardItemsStr = (e.cardItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм [карта]").join(" | ");
+  csv += `ХАРАЖАТ ТАРИХИ (${scope === 'month' ? targetMonth : 'Барча давр'})\n`;
+  csv += "Сана,Вақт,Точка,Касса,Харажат,Қолдиқ,Товарлар,Изоҳ\n";
+  filtered.forEach(e => {
+    const cashItemsStr = (e.cashItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм").join(" | ");
+    const cardItemsStr = (e.cardItems || []).map(i => i.name + (i.kg ? " " + i.kg + "кг" : "") + " - " + i.totalPrice + " сўм").join(" | ");
     const allItems = [cashItemsStr, cardItemsStr].filter(Boolean).join(" | ");
-    csv += [cell(e.date), cell(e.time), cell(e.market), e.cashBalance || 0, e.cashTotal || e.spent || 0, e.cardTotal || 0, e.balance || 0, cell(allItems), cell(e.note)].join(",") + "\n";
+    const spent = (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0);
+    csv += [cell(e.date), cell(e.time), cell(e.market), e.cashBalance || 0, spent, e.balance || 0, cell(allItems), cell(e.note)].join(",") + "\n";
   });
 
   csv += "\nҚАРЗЛАР\n";
-  csv += "Сана,Ким,Точка,Товар,кг,Нарх,Жами (сўм)\n";
+  csv += "Сана,Ким,Точка,Товар,Миқдор,Нарх,Жами (сўм)\n";
   debts.forEach(d => {
     csv += [cell(d.date), cell(d.who), cell(d.market), cell(d.name), d.kg || "", d.unitPrice || "", d.totalPrice || 0].join(",") + "\n";
   });
@@ -2372,9 +2611,12 @@ function exportCSV() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   const date = today();
-  a.href = url; a.download = `bozorlik_${date}.csv`;
-  a.click(); URL.revokeObjectURL(url);
-  showToast("📥 CSV юклаб олинди!");
+  const filename = scope === "month" ? `bozorlik_${targetMonth}.csv` : `bozorlik_all_${date}.csv`;
+  a.href = url; 
+  a.download = filename;
+  a.click(); 
+  URL.revokeObjectURL(url);
+  showToast("📥 Excel (CSV) юклаб олинди!");
 }
 
 /* ══════════════════════════════════════════
@@ -3139,7 +3381,15 @@ async function bzProcessAiAgent(query) {
     `;
   }
 
-  // 8. Tashqi Generativ LLM (agar API kaliti saqlangan bo'lsa)
+  // 8. BUYRUQ: Hisobot eksport / PDF / Excel
+  if (/eksport|экспорт|pdf|пдф|excel|эксель|csv|hisobot.*yukla|хисобот.*юкла/i.test(q)) {
+    setTimeout(() => {
+      openReportModal('month');
+    }, 400);
+    return "📑 <b>Молиявий ҳисобот экспорт ойнаси очилди!</b><br>Ушбу ойнадан харажатлар ва қарзларни PDF (чоп этиш / PDF сақлаш) ёки Excel (CSV) форматида юклаб олишингиз мумкин.";
+  }
+
+  // 9. Tashqi Generativ LLM (agar API kaliti saqlangan bo'lsa)
   const aiKey = localStorage.getItem("bz_ai_key");
   if (aiKey) {
     try {
