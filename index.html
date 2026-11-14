@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>BOZORLIK</title>
-  <link rel="stylesheet" href="style.css?v=3"/>
+  <link rel="stylesheet" href="style.css?v=4"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="apple-touch-startup-image" href="splash.png"/>
@@ -25,6 +25,7 @@
     <span class="h-title">BOZORLIK</span>
   </div>
   <div class="h-actions">
+    <button class="h-btn ai-pill" onclick="openAiAgentModal()" id="ai-btn" title="Bozorlik AI Agenti">🤖 AI</button>
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
     <button class="h-btn tg-status" id="tg-pill" onclick="openTgModal()">✈️ TG</button>
   </div>
@@ -237,11 +238,14 @@
         <span class="section-label">Қарзга товар қўшиш</span>
       </div>
       <p class="hint-text">Сана ва ким олганини алоҳида киритинг</p>
-      <div class="input-row">
-        <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000"
+      <div class="input-row" style="display:flex;gap:6px;align-items:center">
+        <button class="qa-mic-btn" id="debtMicBtn" onclick="toggleDebtVoice()" title="Овозли киритиш"
+          style="width:42px;height:42px;border-radius:var(--radius-xs);border:none;background:var(--blue-bg);color:var(--blue);font-size:1.2rem;cursor:pointer;flex-shrink:0">🎤</button>
+        <input id="debtInp" class="field inp-flex" placeholder="Кийим 150000 ёки Мош 10кг (15000) 150000"
                onkeydown="if(event.key==='Enter')addDebt()"/>
         <button class="add-btn" onclick="addDebt()" style="background: var(--blue);">+</button>
       </div>
+      <div id="debtVoiceStatus" style="display:none;font-size:.78rem;color:var(--blue);text-align:center;padding:4px 16px;animation:pulse 1s infinite">🎤 Қарз учун гапиряпсиз...</div>
       <div class="two-col">
         <input type="date" id="debtDate" class="field"/>
         <input type="text" id="debtWho" class="field" placeholder="Ким (ихтиёрий)"/>
@@ -254,9 +258,15 @@
         Жами: <b id="allDebtTotal">0</b> сўм &nbsp;·&nbsp; <span id="allDebtCnt">0</span> та товар
       </div>
       
-      <div id="allDebtSelectActions" style="display: none; gap: 8px; margin-bottom: 12px;">
-        <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
-        <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
+      <div id="allDebtSelectActions" style="display: none; flex-direction:column; gap: 8px; margin-bottom: 12px;">
+        <div id="selectedDebtBar" class="selected-debt-bar">
+          <span>📌 Танланди: <b id="selDebtCount">0</b> та</span>
+          <span>Жами: <b id="selDebtSum" style="color:var(--blue)">0 сўм</b></span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="select-debts-btn" onclick="selectAllAllDebts()" id="allDebtSelectAllBtn" style="flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg); cursor:pointer; font-size:.85rem;">☐ Ҳаммасини танлаш</button>
+          <button class="delete-selected-btn" onclick="deleteSelectedAllDebts()" style="flex:1.2; padding:10px; border:1.5px solid var(--red); border-radius:10px; background:var(--red-bg); color:var(--red); cursor:pointer; font-size:.85rem; font-weight:600;">🗑 Танланганларни ўчириш</button>
+        </div>
       </div>
 
       <button onclick="sendDebtSummary()" style="width:100%; padding:11px; border:none; border-radius:10px; background:var(--blue); color:#fff; cursor:pointer; font-size:.85rem; font-weight:600; margin-bottom:12px; font-family:inherit;">✈️ Қарзларни Телеграмга юбориш</button>
@@ -421,6 +431,46 @@
   </div>
 </div>
 
+<!-- AI AGENT MODAL -->
+<div class="modal-bg" id="aiAgentModal" onclick="closeAiAgentModal(event)">
+  <div class="modal-box ai-modal-box">
+    <div class="ai-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.4rem">🤖</span>
+        <div>
+          <div style="font-weight:700;font-size:.95rem;color:var(--text)">Bozorlik AI Agenti</div>
+          <div style="font-size:.7rem;color:var(--green)">● Aqlli yordamchi faol</div>
+        </div>
+      </div>
+      <button onclick="closeAiAgentModal()" style="border:none;background:var(--bg);border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem;color:var(--text)">✕</button>
+    </div>
+
+    <!-- Quick prompt chips -->
+    <div class="ai-chips-scroll">
+      <button class="ai-chip" onclick="bzAiQuickPrompt('Bugungi xarajatlar va kassa holatini xulosa qil')">📊 Bugungi holat</button>
+      <button class="ai-chip" onclick="bzAiQuickPrompt('Qarzlarim qancha va kimlarda bor?')">📋 Qarzlar tahlili</button>
+      <button class="ai-chip" onclick="bzAiQuickPrompt('Qaysi bozordan ko\'proq xarid qildim?')">📍 Bozorlar tahlili</button>
+      <button class="ai-chip" onclick="bzAiQuickPrompt('Keyingi safar nima sotib olishim kerak?')">💡 Xarid tavsiyalari</button>
+    </div>
+
+    <!-- Chat feed -->
+    <div class="ai-chat-feed" id="aiChatFeed">
+      <div class="ai-msg bot">
+        Salom! Men sizning <b>Bozorlik AI Agenti</b>zman 🤖.<br/>
+        Men xaridlaringiz, qarzlar va kassani tahlil qilaman, savollarga javob beraman yoki to'g'ridan-to'g'ri buyruqlaringizni bajaraman (masalan: <i>"Naqdga Go'sht 120000 qo'sh"</i> yoki <i>"Aliga 50000 qarz yoz"</i>).
+      </div>
+    </div>
+
+    <!-- Input bar -->
+    <div class="ai-input-bar">
+      <button class="qa-mic-btn" id="aiMicBtn" onclick="toggleAiVoice()" title="Ovozli gapirish"
+        style="width:38px;height:38px;border-radius:10px;border:none;background:var(--blue-bg);color:var(--blue);font-size:1.1rem;cursor:pointer;flex-shrink:0">🎤</button>
+      <input type="text" id="aiInput" class="field" placeholder="Savol yoki buyruq bering..." onkeydown="if(event.key==='Enter')bzSendAiMessage()"/>
+      <button onclick="bzSendAiMessage()" class="add-btn green-btn" style="width:38px;height:38px;font-size:1rem" title="Yuborish">➤</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFETTI -->
 <canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none"></canvas>
 
@@ -428,6 +478,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="firebase.js?v=3"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

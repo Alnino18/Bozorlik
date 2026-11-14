@@ -1379,6 +1379,36 @@ function selectAllAllDebts() {
 function updateAllDebtSelectAll() {
   const checkboxes = document.querySelectorAll("#allDebtList .all-debt-checkbox");
   const selectAllBtn = document.getElementById("allDebtSelectAllBtn");
+  const deleteBtn = document.querySelector(".delete-selected-btn");
+  const bar = document.getElementById("selectedDebtBar");
+  const countEl = document.getElementById("selDebtCount");
+  const sumEl = document.getElementById("selDebtSum");
+
+  const selectedIdxs = getAllSelectedDebtIndexes();
+  let selTotal = 0;
+  selectedIdxs.forEach(idx => {
+    const d = allDebtsArray[idx];
+    if (d && d.totalPrice) selTotal += d.totalPrice;
+  });
+
+  if (bar && countEl && sumEl) {
+    if (selectedIdxs.length > 0) {
+      bar.style.display = "flex";
+      countEl.textContent = selectedIdxs.length;
+      sumEl.textContent = fmt(selTotal) + " сўм";
+    } else {
+      bar.style.display = "none";
+    }
+  }
+
+  if (deleteBtn) {
+    if (selectedIdxs.length > 0) {
+      deleteBtn.textContent = `🗑 Танланганларни ўчириш (${selectedIdxs.length} та · ${fmt(selTotal)} сўм)`;
+    } else {
+      deleteBtn.textContent = "🗑 Танланганларни ўчириш";
+    }
+  }
+
   if (!selectAllBtn) return;
   const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
   const someChecked = Array.from(checkboxes).some(cb => cb.checked);
@@ -1387,7 +1417,7 @@ function updateAllDebtSelectAll() {
   } else if (allChecked) {
     selectAllBtn.textContent = "✓ Ҳаммасини бекор қилиш";
   } else if (someChecked) {
-    selectAllBtn.textContent = "☑ Қисман танланган";
+    selectAllBtn.textContent = `☑ Танланди (${selectedIdxs.length})`;
   } else {
     selectAllBtn.textContent = "☐ Ҳаммасини танлаш";
   }
@@ -2737,27 +2767,10 @@ function startVoice() {
 
   recognition.onresult = e => {
     let transcript = e.results[0][0].transcript;
-    // Ўзбекча сонларни рақамга айлантириш
-    transcript = transcript
-      .replace(/ўн беш минг/gi, "15000")
-      .replace(/ўн минг/gi, "10000")
-      .replace(/йигирма минг/gi, "20000")
-      .replace(/ўттиз минг/gi, "30000")
-      .replace(/қирқ минг/gi, "40000")
-      .replace(/эллик минг/gi, "50000")
-      .replace(/юз минг/gi, "100000")
-      .replace(/икки юз минг/gi, "200000")
-      .replace(/беш юз минг/gi, "500000")
-      .replace(/бир миллион/gi, "1000000")
-      .replace(/ўн килограмм/gi, "10кг")
-      .replace(/беш килограмм/gi, "5кг")
-      .replace(/йигирма килограмм/gi, "20кг")
-      .replace(/ўттиз килограмм/gi, "30кг")
-      .replace(/бир килограмм/gi, "1кг");
-
+    const norm = bzNormalizeSpokenText(transcript);
     const inp = document.getElementById("cashInp");
-    if (inp) { inp.value = transcript; inp.focus(); }
-    showToast("🎤 " + transcript);
+    if (inp) { inp.value = norm; inp.focus(); }
+    showToast("🎤 " + norm);
     stopVoice();
   };
 
@@ -2773,6 +2786,421 @@ function stopVoice() {
   if (btn) { btn.textContent = "🎤"; btn.style.background = ""; }
   const vs = document.getElementById("voiceStatus");
   if (vs) vs.style.display = "none";
+}
+
+/* ── ОВОЗ МАТНИНИ ТОЗАЛАШ ВА НОРМАЛЛАШТИРИШ ── */
+function bzNormalizeSpokenText(t) {
+  if (!t) return "";
+  let s = t.toLowerCase();
+  const pairs = [
+    [/ўн беш минг|o'?n besh ming/gi, "15000"],
+    [/ўн минг|o'?n ming/gi, "10000"],
+    [/йигирма беш минг|yigirma besh ming/gi, "25000"],
+    [/йигирма минг|yigirma ming/gi, "20000"],
+    [/ўттиз беш минг|o'?ttiz besh ming/gi, "35000"],
+    [/ўттиз минг|o'?ttiz ming/gi, "30000"],
+    [/қирқ беш минг|qirq besh ming/gi, "45000"],
+    [/қирқ минг|qirq ming/gi, "40000"],
+    [/эллик минг|ellik ming/gi, "50000"],
+    [/олтмиш минг|oltmysh ming|oltmish ming/gi, "60000"],
+    [/етмиш минг|yetmish ming/gi, "70000"],
+    [/саксон минг|sakson ming/gi, "80000"],
+    [/тўқсон минг|to'?qson ming/gi, "90000"],
+    [/юз минг|yuz ming/gi, "100000"],
+    [/икки юз минг|ikki yuz ming/gi, "200000"],
+    [/уч юз минг|uch yuz ming/gi, "300000"],
+    [/тўрт юз минг|to'?rt yuz ming/gi, "400000"],
+    [/беш юз минг|besh yuz ming/gi, "500000"],
+    [/бир миллион|bir million/gi, "1000000"],
+    [/минг|ming/gi, "000"],
+    [/ўн килограмм|ўн кило|o'?n kg|o'?n kilo/gi, "10кг"],
+    [/беш килограмм|беш кило|besh kg|besh kilo/gi, "5кг"],
+    [/йигирма килограмм|yigirma kg/gi, "20кг"],
+    [/бир килограмм|бир кило|bir kg|bir kilo/gi, "1кг"],
+    [/ярим килограмм|ярим кило|yarim kilo/gi, "0.5кг"],
+    [/килограмм|кило|kilogramm|kilo/gi, "кг"]
+  ];
+  pairs.forEach(([rgx, repl]) => { s = s.replace(rgx, repl); });
+  s = s.replace(/(\d)\s+(\d{3})(?!\d)/g, "$1$2");
+  return s.trim();
+}
+
+/* ── ҚАРЗЛАР УЧУН ОВОЗЛИ КИРИТИШ ── */
+let debtVoiceActive = false;
+let debtRecognition = null;
+
+function toggleDebtVoice() {
+  if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+    showToast("⚠️ Браузер овозни қўллаб-қувватламайди. Chrome ишлатинг.");
+    return;
+  }
+  if (debtVoiceActive) {
+    stopDebtVoice();
+  } else {
+    startDebtVoice();
+  }
+}
+
+function startDebtVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  debtRecognition = new SR();
+  debtRecognition.lang = "uz-UZ";
+  debtRecognition.interimResults = false;
+  debtRecognition.continuous = false;
+
+  debtRecognition.onstart = () => {
+    debtVoiceActive = true;
+    const btn = document.getElementById("debtMicBtn");
+    if (btn) { btn.textContent = "⏹"; btn.style.background = "var(--red)"; btn.style.color = "#fff"; }
+    const vs = document.getElementById("debtVoiceStatus");
+    if (vs) vs.style.display = "block";
+  };
+
+  debtRecognition.onresult = e => {
+    let transcript = e.results[0][0].transcript;
+    const norm = bzNormalizeSpokenText(transcript);
+    const inp = document.getElementById("debtInp");
+    if (inp) {
+      inp.value = norm;
+      inp.focus();
+    }
+    showToast("🎤 " + norm);
+    stopDebtVoice();
+  };
+
+  debtRecognition.onerror = () => {
+    stopDebtVoice();
+    showToast("⚠️ Овоз танилмади, қайта уриниб кўринг");
+  };
+  debtRecognition.onend = () => stopDebtVoice();
+  debtRecognition.start();
+}
+
+function stopDebtVoice() {
+  debtVoiceActive = false;
+  if (debtRecognition) {
+    try { debtRecognition.stop(); } catch(e) {}
+    debtRecognition = null;
+  }
+  const btn = document.getElementById("debtMicBtn");
+  if (btn) { btn.textContent = "🎤"; btn.style.background = ""; btn.style.color = "var(--blue)"; }
+  const vs = document.getElementById("debtVoiceStatus");
+  if (vs) vs.style.display = "none";
+}
+
+/* ══════════════════════════════════════════
+   🤖 BOZORLIK AI AGENTI (SMART ASSISTANT)
+══════════════════════════════════════════ */
+let aiVoiceActive = false;
+let aiRecognition = null;
+
+function openAiAgentModal() {
+  const m = document.getElementById("aiAgentModal");
+  if (m) {
+    m.classList.add("open");
+    setTimeout(() => {
+      const inp = document.getElementById("aiInput");
+      if (inp) inp.focus();
+    }, 200);
+  }
+}
+
+function closeAiAgentModal(e) {
+  if (!e || e.target === document.getElementById("aiAgentModal")) {
+    const m = document.getElementById("aiAgentModal");
+    if (m) m.classList.remove("open");
+    stopAiVoice();
+  }
+}
+
+function bzAiQuickPrompt(txt) {
+  const inp = document.getElementById("aiInput");
+  if (inp) {
+    inp.value = txt;
+    bzSendAiMessage();
+  }
+}
+
+function bzAiAppendMessage(role, htmlText) {
+  const feed = document.getElementById("aiChatFeed");
+  if (!feed) return;
+  const div = document.createElement("div");
+  div.className = "ai-msg " + role;
+  div.innerHTML = htmlText;
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+async function bzSendAiMessage() {
+  const inp = document.getElementById("aiInput");
+  if (!inp) return;
+  const q = inp.value.trim();
+  if (!q) return;
+
+  inp.value = "";
+  bzAiAppendMessage("user", esc(q));
+
+  const feed = document.getElementById("aiChatFeed");
+  const typingDiv = document.createElement("div");
+  typingDiv.className = "ai-msg bot";
+  typingDiv.id = "aiTypingIndicator";
+  typingDiv.innerHTML = "🤖 <i>O'ylayapman...</i>";
+  if (feed) {
+    feed.appendChild(typingDiv);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  try {
+    const answer = await bzProcessAiAgent(q);
+    typingDiv.remove();
+    bzAiAppendMessage("bot", answer);
+  } catch(e) {
+    typingDiv.remove();
+    bzAiAppendMessage("bot", "⚠️ Xatolik yuz berdi: " + esc(e.message));
+  }
+}
+
+function toggleAiVoice() {
+  if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+    showToast("⚠️ Браузер овозни қўллаб-қувватламайди.");
+    return;
+  }
+  if (aiVoiceActive) {
+    stopAiVoice();
+  } else {
+    startAiVoice();
+  }
+}
+
+function startAiVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  aiRecognition = new SR();
+  aiRecognition.lang = "uz-UZ";
+  aiRecognition.interimResults = false;
+  aiRecognition.continuous = false;
+
+  aiRecognition.onstart = () => {
+    aiVoiceActive = true;
+    const btn = document.getElementById("aiMicBtn");
+    if (btn) { btn.textContent = "⏹"; btn.style.background = "var(--red)"; btn.style.color = "#fff"; }
+  };
+
+  aiRecognition.onresult = e => {
+    let transcript = e.results[0][0].transcript;
+    const norm = bzNormalizeSpokenText(transcript);
+    const inp = document.getElementById("aiInput");
+    if (inp) inp.value = norm;
+    stopAiVoice();
+    bzSendAiMessage();
+  };
+
+  aiRecognition.onerror = () => stopAiVoice();
+  aiRecognition.onend   = () => stopAiVoice();
+  aiRecognition.start();
+}
+
+function stopAiVoice() {
+  aiVoiceActive = false;
+  if (aiRecognition) {
+    try { aiRecognition.stop(); } catch(e) {}
+    aiRecognition = null;
+  }
+  const btn = document.getElementById("aiMicBtn");
+  if (btn) { btn.textContent = "🎤"; btn.style.background = ""; btn.style.color = "var(--blue)"; }
+}
+
+/* AI Agentning ichki tahliliy va boshqaruv mexanizmi */
+async function bzProcessAiAgent(query) {
+  const q = query.toLowerCase().trim();
+  const hist = safeGetJSON("bz_history", []);
+  const debts = safeGetJSON("bz_debts", []);
+  const cashBal = getCashBalance();
+  const cardBal = getCardBal ? getCardBalance() : 0;
+  const t = today();
+
+  // 1. BUYRUQ: Naqdga tovar qo'shish
+  if (/naqd|нақд/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
+    const clean = q.replace(/naqdga|нақдга|naqd|нақд|qo'?sh|yoz|qil/gi, "").trim();
+    const p = parse(clean);
+    if (p) {
+      p.seq = itemSeq++;
+      p.market = getMarket();
+      cashItems.push(p);
+      renderCash();
+      updateStats();
+      bzHaptic("success");
+      return `✅ <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) нақд товарларга муваффақиятли қўшилди!<br>Жорий нақд сават: <b>${fmt(cashItems.reduce((s,i)=>s+i.totalPrice,0))} сўм</b>`;
+    }
+  }
+
+  // 2. BUYRUQ: Kartaga tovar qo'shish
+  if (/karta|карта/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
+    const clean = q.replace(/kartaga|картага|karta|карта|qo'?sh|yoz|qil/gi, "").trim();
+    const p = parse(clean);
+    if (p) {
+      p.seq = itemSeq++;
+      p.market = getMarket();
+      cardItems.push(p);
+      renderCard();
+      updateStats();
+      bzHaptic("success");
+      return `💳 <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) карта товарларга муваффақиятли қўшилди!<br>Жорий карта сават: <b>${fmt(cardItems.reduce((s,i)=>s+i.totalPrice,0))} сўм</b>`;
+    }
+  }
+
+  // 3. BUYRUQ: Qarz qo'shish
+  if (/qarz|қарз/i.test(q) && /qo'?sh|yoz|бердим|олди/i.test(q)) {
+    const clean = q.replace(/qarzga|қарзга|qarz|қарз|qo'?sh|yoz/gi, "").trim();
+    const p = parse(clean);
+    if (p) {
+      loadAllDebts();
+      const newDebt = {
+        ...p,
+        date: today(),
+        who: "",
+        market: getMarket(),
+        savedAt: today(),
+        id: Date.now() + Math.random()
+      };
+      allDebtsArray.push(newDebt);
+      saveAllDebtsToStorage();
+      if (typeof bzSaveDebt === "function") bzSaveDebt(newDebt);
+      renderAllDebts();
+      updateStats();
+      bzHaptic("success");
+      return `📋 <b>${esc(p.name)}</b> (${fmt(p.totalPrice)} сўм) қарзлар рўйхатига қўшилди!<br>Жами барча қарзлар: <b>${fmt(allDebtsArray.reduce((s,d)=>s+d.totalPrice,0))} сўм</b>`;
+    }
+  }
+
+  // 4. SAVOL: Bugungi holat va xulosalar
+  if (/bugun|бугун|holat|ҳисобот|hisobot|qoldiq|қолдиқ|kassa|касса|balans|баланс/i.test(q)) {
+    const todayHist = hist.filter(e => e.date === t);
+    const todaySpend = todayHist.reduce((s,e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
+    const cartCash = cashItems.reduce((s,i)=>s+i.totalPrice,0);
+    const cartCard = cardItems.reduce((s,i)=>s+i.totalPrice,0);
+    const totalRem = (cashBal + cardBal) - (cartCash + cartCard);
+
+    return `
+      <b>📊 Bugungi umumiy moliyaviy holat:</b><br><br>
+      • 💵 <b>Naqd kassa:</b> ${fmt(cashBal)} сўм<br>
+      • 💳 <b>Karta kassa:</b> ${fmt(cardBal)} сўм<br>
+      • 🛒 <b>Hozirgi savatchada:</b> ${cashItems.length + cardItems.length} ta tovar (${fmt(cartCash + cartCard)} сўм)<br>
+      • 📅 <b>Bugun tugatilgan xarajat:</b> ${fmt(todaySpend)} сўм<br>
+      • ✅ <b>Kassada sof qoldiq:</b> <b style="color:${totalRem < 0 ? 'var(--red)':'var(--green)'}">${fmt(totalRem)} сўм</b>
+    `;
+  }
+
+  // 5. SAVOL: Qarzlar tahlili
+  if (/qarz|қарз|kimda|кимда|qarzdor/i.test(q)) {
+    if (!debts.length) {
+      return "🎉 Ajoyib! Hozirda hech qanday qarzdorlik mavjud emas.";
+    }
+    const totalDebt = debts.reduce((s,d)=>s+(d.totalPrice||0),0);
+    const whoMap = {};
+    debts.forEach(d => {
+      const w = d.who ? d.who.trim() : "Noma'lum";
+      whoMap[w] = (whoMap[w] || 0) + (d.totalPrice || 0);
+    });
+    const topDebtors = Object.entries(whoMap).sort((a,b)=>b[1]-a[1]);
+    let debtDetails = topDebtors.slice(0, 4).map(([name, sum]) => `• 👤 <b>${esc(name)}:</b> ${fmt(sum)} сўм`).join("<br>");
+
+    return `
+      <b>📋 Qarzdorlik tahlili:</b><br><br>
+      • <b>Jami qarz:</b> <span style="color:var(--red);font-weight:700">${fmt(totalDebt)} сўм</span> (${debts.length} ta tovar)<br>
+      • <b>Asosiy qarzdorlar:</b><br>${debtDetails}<br><br>
+      <i>💡 Maslahat: 'Қарзлар' bo'limida belgilangan qarzlar summasini alohida kuzatishingiz mumkin.</i>
+    `;
+  }
+
+  // 6. SAVOL: Bozorlar va tochkalar tahlili
+  if (/bozor|бозор|tochka|точка|qayer|қайер|arzon|арзон/i.test(q)) {
+    if (!hist.length) {
+      return "Tarixda hali xaridlar mavjud emas. Bir necha xaridlardan so'ng to'liq tahlil bera olaman.";
+    }
+    const mktMap = {};
+    hist.forEach(e => {
+      const m = e.market || "Boshqa";
+      mktMap[m] = (mktMap[m] || 0) + (e.cashTotal || e.spent || 0) + (e.cardTotal || 0);
+    });
+    const sorted = Object.entries(mktMap).sort((a,b)=>b[1]-a[1]);
+    const top = sorted[0];
+    const totalAll = Object.values(mktMap).reduce((a,b)=>a+b,0);
+    const pct = totalAll > 0 ? Math.round((top[1] / totalAll) * 100) : 0;
+
+    let list = sorted.map(([m, s]) => `• 📍 <b>${m}:</b> ${fmt(s)} сўм (${Math.round((s/totalAll)*100)}%)`).join("<br>");
+
+    return `
+      <b>📍 Savdo nuqtalari (Bozorlar) tahlili:</b><br><br>
+      Eng ko'p mablag' <b>${top[0]}</b> bozoriga sarflangan (${fmt(top[1])} сўм, umumiy xarajatning ${pct}% qismi).<br><br>
+      <b>Tochkalar bo'yicha taqsimot:</b><br>${list}
+    `;
+  }
+
+  // 7. SAVOL: Narxlar va tavsiyalar
+  if (/tavsiya|тавсия|nima|maslahat|keyingi|rejala/i.test(q)) {
+    const items = {};
+    hist.forEach(e => {
+      [...(e.cashItems||[]), ...(e.cardItems||[])].forEach(i => {
+        if (!i.name) return;
+        items[i.name] = (items[i.name] || 0) + 1;
+      });
+    });
+    const frequent = Object.entries(items).sort((a,b)=>b[1]-a[1]).slice(0, 4);
+    if (!frequent.length) {
+      return "💡 Muntazam xaridlaringiz shakllangach, bu yerda shaxsiy tavsiyalarni ko'rsataman.";
+    }
+    const str = frequent.map(([n, c]) => `• 🛒 <b>${esc(n)}</b> (${c} marta xarid qilingan)`).join("<br>");
+    return `
+      <b>💡 Sizning eng doimiy xaridlaringiz:</b><br><br>
+      ${str}<br><br>
+      Bozorga borishdan oldin ushbu mahsulotlarning zaxirasini tekshirib olishingizni maslahat beraman.
+    `;
+  }
+
+  // 8. Tashqi Generativ LLM (agar API kaliti saqlangan bo'lsa)
+  const aiKey = localStorage.getItem("bz_ai_key");
+  if (aiKey) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": aiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 300,
+          messages: [{
+            role: "user",
+            content: `Sen "Bozorlik" nomli bozor xarajatlari va qarz hisobchisi ilovasining aqlli AI assistentisan.
+Foydalanuvchi ma'lumotlari:
+- Naqd kassa: ${cashBal} so'm
+- Karta kassa: ${cardBal} so'm
+- Jami qarzlar soni: ${debts.length} ta
+- Tarixdagi xaridlar: ${hist.length} ta
+Foydalanuvchi savoli: "${query}".
+O'zbek tilida qisqa, aniq va do'stona javob ber.`
+          }]
+        })
+      });
+      const data = await res.json();
+      const txt = data.content?.[0]?.text;
+      if (txt) return txt.replace(/\n/g, "<br>");
+    } catch(err) {}
+  }
+
+  // Standart yordam
+  return `
+    Men sizning <b>Bozorlik AI Agenti</b>zman! 🤖<br><br>
+    Quyidagi buyruq yoki savollarni berishingiz mumkin:<br>
+    • <i>"Bugungi holat"</i> — kassa va bugungi xarajatlar<br>
+    • <i>"Qarzlar tahlili"</i> — qarzlar kimda qancha<br>
+    • <i>"Bozorlar tahlili"</i> — qaysi tochkaga ko'p sarflangan<br>
+    • <i>"Naqdga Go'sht 120000 qo'sh"</i> — to'g'ridan-to'g'ri tovar qo'shish<br>
+    • <i>"Aliga 50000 qarz yoz"</i> — tezkor qarz yozish
+  `;
 }
 
 /* ══════════════════════════════════════════
