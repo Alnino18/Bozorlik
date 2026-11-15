@@ -653,73 +653,19 @@ function bzCamAddItem(name, price, type) {
 }
 
 /* ══════════════════════════════════════════
-   📈 TOVAR NARX TARIXI
-   Tovar qo'shilganda narxini ko'rsatadi
+   📈 TOVAR NARX TARIXI (O'chirilgan - qulay va tez yozish uchun)
 ══════════════════════════════════════════ */
-function bzGetLastPrice(itemName) {
-  if (!itemName || itemName.length < 2) return null;
-  const h = safeGetJSON("bz_history", []);
-  const name = itemName.trim().toLowerCase();
-
-  // Barcha tarixdan ushbu tovarni qidirish
-  const found = [];
-  h.forEach(entry => {
-    const allItems = [...(entry.cashItems||[]), ...(entry.cardItems||[])];
-    allItems.forEach(item => {
-      const itPrice = item.unitPrice || item.totalPrice;
-      if (item.name && item.name.toLowerCase().includes(name) && itPrice) {
-        found.push({ date: entry.date, price: itPrice, market: entry.market || "" });
-      }
-    });
-  });
-
-  if (!found.length) return null;
-  // Eng so'nggi
-  found.sort((a,b) => (b.date||"").localeCompare(a.date||""));
-  return found[0];
-}
-
-function bzShowPriceHint(inputEl, nameEl) {
-  // nameEl — tovar nomi input
-  const val = (nameEl ? nameEl.value : inputEl.value || "").trim();
-  // Tovarning nom qismini ajratib olamiz (masalan: "Мош 10кг..." dan "Мош")
-  const name = val.replace(/\s+[\d.,]+.*$/, "").trim();
-  if (name.length < 2) { bzRemovePriceHint(inputEl); return; }
-
-  const last = bzGetLastPrice(name);
-  if (!last) { bzRemovePriceHint(inputEl); return; }
-
-  let hint = document.getElementById("bzPriceHint_" + inputEl.id);
-  if (!hint) {
-    hint = document.createElement("div");
-    hint.id = "bzPriceHint_" + inputEl.id;
-    hint.style.cssText = "font-size:.72rem;color:var(--blue);padding:3px 8px;background:var(--blue-bg);border-radius:8px;margin-top:3px;display:inline-block";
-    inputEl.parentNode.insertBefore(hint, inputEl.nextSibling);
-  }
-  hint.textContent = `📅 Oxirgi: ${fmt(last.price)} сўм (${last.date}${last.market ? " · " + last.market : ""})`;
-}
-
+function bzGetLastPrice() { return null; }
+function bzShowPriceHint() {}
 function bzRemovePriceHint(inputEl) {
+  if (!inputEl) return;
   const hint = document.getElementById("bzPriceHint_" + inputEl.id);
   if (hint) hint.remove();
 }
-
-// Tovar nomi yozilganda narx tarixini ko'rsatish
 function bzAttachPriceHints() {
-  // Naqd tovar input
-  const cashInp = document.getElementById("cashInp");
-  if (cashInp && !cashInp._bzHintAttached) {
-    cashInp._bzHintAttached = true;
-    cashInp.addEventListener("input", () => bzShowPriceHint(cashInp, cashInp));
-    cashInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cashInp), 2000));
-  }
-  // Karta tovar input
-  const cardInp = document.getElementById("cardInp");
-  if (cardInp && !cardInp._bzHintAttached) {
-    cardInp._bzHintAttached = true;
-    cardInp.addEventListener("input", () => bzShowPriceHint(cardInp, cardInp));
-    cardInp.addEventListener("blur",  () => setTimeout(() => bzRemovePriceHint(cardInp), 2000));
-  }
+  // Foydalanuvchiga xalal bermasligi uchun input hintlari butunlay o'chirildi
+  const hint = document.getElementById("bzPriceHint_cashInp");
+  if (hint) hint.remove();
 }
 
 /* ══════════════════════════════════════════

@@ -141,6 +141,7 @@
       <button onclick="bzOpenCameraAI()" title="Kamera bilan tovar qo'shish"
         style="width:42px;height:42px;border-radius:var(--radius-xs);border:none;background:var(--purple-bg);color:var(--purple);font-size:1.2rem;cursor:pointer;flex-shrink:0">📸</button>
       <input id="cashInp" class="field qa-inp" placeholder="Мош 10кг (15000) 150000"
+             autocomplete="off" autocorrect="off" spellcheck="false"
              onkeydown="if(event.key==='Enter')addCash()"/>
       <button class="add-btn" onclick="addTemplate()" style="background:var(--orange)" title="Шаблонга сақлаш">📌</button>
       <button class="add-btn green-btn" onclick="addCash()">+</button>
@@ -478,6 +479,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="firebase.js?v=3"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
