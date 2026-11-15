@@ -909,7 +909,7 @@ body.dark .quick-chip.calc-chip {
 .calc-modal-box {
   max-width: 360px;
   border-radius: 24px 24px 0 0;
-  padding: 18px 16px 28px;
+  padding: 18px 16px max(24px, calc(16px + env(safe-area-inset-bottom, 0px)));
 }
 @media (min-width: 540px) {
   .calc-modal-box {
@@ -1006,6 +1006,10 @@ body.dark .calc-btn.num-btn {
   background: var(--bg);
   color: var(--text2);
 }
+body.dark .calc-btn.op-func {
+  background: #2c2c2e;
+  color: var(--text);
+}
 .calc-btn.op-math {
   background: var(--blue-bg);
   color: var(--blue);
@@ -1052,6 +1056,11 @@ body.dark .calc-btn.num-btn {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
+}
+body.dark .calc-act-btn.copy-btn {
+  background: #2c2c2e;
+  color: var(--text);
+  border-color: #3a3a3c;
 }
 
 @media print {

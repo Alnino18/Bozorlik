@@ -1058,10 +1058,23 @@ function quickFillChip(productName) {
   bzHaptic("light");
   const inp = document.getElementById("cashInp");
   if (!inp) return;
-  inp.value = productName + " ";
+  const cur = inp.value.trim();
+  if (!cur) {
+    inp.value = productName + " ";
+  } else if (/^[\d.,\s*+\-/()kgкг]+$/i.test(cur)) {
+    inp.value = productName + " " + cur;
+  } else {
+    const matchNum = cur.match(/^.+?\s+([\d.,\s*()kgкг+\-/]+)$/i);
+    if (matchNum && matchNum[1]) {
+      inp.value = productName + " " + matchNum[1].trim();
+    } else {
+      inp.value = productName + " ";
+    }
+  }
   inp.focus();
   const len = inp.value.length;
   try { inp.setSelectionRange(len, len); } catch (e) {}
+  try { inp.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
   showToast("✏️ " + productName + " учун нарх ёки миқдорни киритинг");
 }
 
@@ -1682,32 +1695,55 @@ function bzCanonicalName(str) {
   const c2l = {
     "а":"a", "б":"b", "в":"v", "г":"g", "д":"d", "е":"e", "ё":"yo", "ж":"j",
     "з":"z", "и":"i", "й":"y", "к":"k", "л":"l", "м":"m", "н":"n", "о":"o",
-    "п":"p", "р":"r", "с":"s", "т":"t", "у":"u", "ф":"f", "х":"x", "ҳ":"h",
-    "ц":"ts", "ч":"ch", "ш":"sh", "щ":"sh", "ъ":"", "ь":"", "э":"e", "ю":"yu",
-    "я":"ya", "ў":"o", "ғ":"g", "қ":"q"
+    "п":"p", "р":"r", "с":"s", "т":"t", "у":"o", "ф":"f", "х":"h", "ҳ":"h",
+    "ц":"s", "ч":"ch", "ш":"sh", "щ":"sh", "ъ":"", "ь":"", "э":"e", "ю":"yu",
+    "я":"ya", "ў":"o", "ғ":"g", "қ":"k"
   };
   s = s.split("").map(ch => c2l[ch] !== undefined ? c2l[ch] : ch).join("");
-  return s.replace(/['\`ʻʼ]/g, "");
+  return s
+    .replace(/['\`ʻʼ]/g, "")
+    .replace(/q/g, "k")
+    .replace(/x/g, "h")
+    .replace(/u/g, "o");
 }
 
 function bzMatchesQuery(targetStr, queryStr) {
   if (!targetStr || !queryStr) return false;
   const t = targetStr.toLowerCase();
-  const q = queryStr.toLowerCase();
+  const q = queryStr.toLowerCase().trim();
   if (t.includes(q)) return true;
   const cT = bzCanonicalName(t);
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words.every(w => {
+      const cW = bzCanonicalName(w);
+      return cT.includes(cW) || t.includes(w);
+    });
+  }
   const cQ = bzCanonicalName(q);
   return cT.includes(cQ);
 }
 
 function highlightMatch(text, query) {
   if (!query) return text;
-  const escQ = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`(${escQ})`, "gi");
+  const safeQ = esc(query.trim()).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!safeQ) return text;
+  const regex = new RegExp(`(${safeQ})`, "gi");
   if (regex.test(text)) {
     return text.replace(regex, '<mark style="background:rgba(255,204,0,0.35);color:inherit;padding:0 3px;border-radius:4px;font-weight:700">$1</mark>');
   }
   return text;
+}
+
+function openHistoryReceipt(idx) {
+  const h = safeGetJSON("bz_history", []);
+  const entry = h[idx];
+  if (!entry) {
+    showToast("⚠️ Чек маълумоти топилмади");
+    return;
+  }
+  lastReceiptData = entry;
+  showReceipt();
 }
 
 function showReceiptForEntry(entry) {
@@ -1784,11 +1820,30 @@ function renderHistory() {
       return;
     }
 
+    // Энг янги харидларни юқорида кўрсатиш учун саралаймиз
+    matches.sort((a, b) => {
+      const dtA = (a.date || "") + " " + (a.time || "");
+      const dtB = (b.date || "") + " " + (b.time || "");
+      return dtB.localeCompare(dtA);
+    });
+
     const totalSpent = matches.reduce((s, m) => s + (m.totalPrice || 0), 0);
     const unitPrices = matches.map(m => m.unitPrice).filter(p => p > 0);
-    const minPrice = unitPrices.length ? Math.min(...unitPrices) : null;
-    const maxPrice = unitPrices.length ? Math.max(...unitPrices) : null;
+    const totalPrices = matches.map(m => m.totalPrice).filter(p => p > 0);
+
+    const priceList = unitPrices.length ? unitPrices : totalPrices;
+    const minPrice = priceList.length ? Math.min(...priceList) : null;
+    const maxPrice = priceList.length ? Math.max(...priceList) : null;
     const latestPrice = matches[0].unitPrice || matches[0].totalPrice;
+
+    let priceRangeHtml = "";
+    if (minPrice && maxPrice) {
+      if (minPrice !== maxPrice) {
+        priceRangeHtml = `<span>📊 Нарх оралиғи: <b style="color:var(--green)">${fmt(minPrice)}</b> - <b style="color:var(--red)">${fmt(maxPrice)} сўм</b></span>`;
+      } else {
+        priceRangeHtml = `<span>📊 Нархи: <b style="color:var(--blue)">${fmt(minPrice)} сўм</b></span>`;
+      }
+    }
 
     let statsBanner = `
       <div style="background:var(--card);border:1.5px solid var(--blue);border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,122,255,0.08)">
@@ -1799,7 +1854,7 @@ function renderHistory() {
         <div style="font-size:.8rem;color:var(--text2);display:flex;flex-wrap:wrap;gap:12px;margin-top:6px">
           <span>💰 Жами сумма: <b style="color:var(--text)">${fmt(totalSpent)} сўм</b></span>
           ${latestPrice ? `<span>🕐 Охирги нарх: <b style="color:var(--orange)">${fmt(latestPrice)} сўм</b></span>` : ""}
-          ${minPrice && maxPrice ? `<span>📊 Нарх оралиғи: <b style="color:var(--green)">${fmt(minPrice)}</b> - <b style="color:var(--red)">${fmt(maxPrice)} сўм</b></span>` : ""}
+          ${priceRangeHtml}
         </div>
       </div>`;
 
@@ -1828,7 +1883,7 @@ function renderHistory() {
               <span>📍 <b>${esc(m.market)}</b></span>
               <span>📅 ${fmtD(m.date)}${m.time ? ' ' + m.time : ''}</span>
             </div>
-            <button onclick="showReceiptForEntry(safeGetJSON('bz_history', [])[${m.eIdx}])" style="padding:4px 10px;border-radius:8px;border:none;background:var(--blue-bg);color:var(--blue);font-weight:600;font-size:.75rem;cursor:pointer;font-family:inherit">
+            <button onclick="openHistoryReceipt(${m.eIdx})" style="padding:4px 10px;border-radius:8px;border:none;background:var(--blue-bg);color:var(--blue);font-weight:600;font-size:.75rem;cursor:pointer;font-family:inherit">
               🧾 Чек
             </button>
           </div>
@@ -3718,6 +3773,28 @@ let calcExpr = "";
 let calcCurrent = "0";
 let calcJustEvaluated = false;
 
+function bzCopyFallback(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.left = "-9999px";
+    ta.setAttribute("readonly", "");
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) {
+      showToast("📋 Нусха олинди: " + text);
+    } else {
+      showToast("⚠️ Нусха олиб бўлмади: " + text);
+    }
+  } catch (err) {
+    showToast("⚠️ Нусха олиб бўлмади");
+  }
+}
+
 function openCalcModal() {
   bzHaptic("light");
   const m = document.getElementById("calcModal");
@@ -3739,16 +3816,33 @@ function calcUpdateDisplay() {
   const resEl = document.getElementById("calcResultView");
   if (exprEl) exprEl.innerHTML = calcExpr || "&nbsp;";
   if (resEl) {
-    if (calcCurrent === "" || calcCurrent === "0") {
+    let displayStr = calcCurrent;
+    if (displayStr === "") {
+      if (calcExpr) {
+        const prevVal = calcEvalSafe(calcExpr.trim().replace(/[×÷\−\+\*\/\-]$/, "").trim());
+        displayStr = String(prevVal);
+      } else {
+        displayStr = "0";
+      }
+    }
+    if (displayStr === "0") {
       resEl.textContent = "0";
-    } else if (calcCurrent.endsWith(".")) {
-      const whole = calcCurrent.slice(0, -1);
+    } else if (displayStr.endsWith(".")) {
+      const whole = displayStr.slice(0, -1);
       resEl.textContent = (isNaN(+whole) ? whole : fmt(+whole)) + ".";
-    } else if (calcCurrent.includes(".")) {
-      const [whole, dec] = calcCurrent.split(".");
+    } else if (displayStr.includes(".")) {
+      const [whole, dec] = displayStr.split(".");
       resEl.textContent = (isNaN(+whole) ? whole : fmt(+whole)) + "." + dec;
     } else {
-      resEl.textContent = isNaN(+calcCurrent) ? calcCurrent : fmt(+calcCurrent);
+      resEl.textContent = isNaN(+displayStr) ? displayStr : fmt(+displayStr);
+    }
+
+    if (resEl.textContent.length > 12) {
+      resEl.style.fontSize = "1.35rem";
+    } else if (resEl.textContent.length > 9) {
+      resEl.style.fontSize = "1.55rem";
+    } else {
+      resEl.style.fontSize = "1.85rem";
     }
   }
 }
@@ -3761,7 +3855,7 @@ function calcInputDigit(digit) {
     calcJustEvaluated = false;
   } else {
     if (calcCurrent.length >= 14) return;
-    if (calcCurrent === "0") {
+    if (calcCurrent === "0" || calcCurrent === "") {
       calcCurrent = digit === "00" ? "0" : digit;
     } else {
       calcCurrent += digit;
@@ -3791,6 +3885,15 @@ function calcInputBackspace() {
     calcJustEvaluated = false;
   } else if (calcCurrent.length > 1) {
     calcCurrent = calcCurrent.slice(0, -1);
+  } else if (calcCurrent === "" && calcExpr !== "") {
+    const m = calcExpr.match(/^(.+?)\s+[×÷\−\+\*\/\-]\s+$/);
+    if (m && m[1]) {
+      calcCurrent = m[1].trim();
+      calcExpr = "";
+    } else {
+      calcCurrent = "0";
+      calcExpr = "";
+    }
   } else {
     calcCurrent = "0";
   }
@@ -3823,11 +3926,14 @@ function calcOpSymbol(op) {
 }
 
 function calcEvalSafe(exprStr) {
-  const sanitized = exprStr
+  let sanitized = String(exprStr || "")
     .replace(/×/g, "*")
     .replace(/÷/g, "/")
     .replace(/−/g, "-")
     .replace(/,/g, ".");
+  sanitized = sanitized.replace(/(?<=\d)\s+(?=\d)/g, "");
+  sanitized = sanitized.trim().replace(/[\+\-\*\/]+$/, "").trim();
+  if (!sanitized) return 0;
   if (!/^[0-9\.\s\+\-\*\/]+$/.test(sanitized)) return 0;
   try {
     const res = Function("return (" + sanitized + ")")();
@@ -3856,6 +3962,8 @@ function calcInputOp(op) {
     }
   } else if (calcExpr !== "") {
     calcExpr = calcExpr.replace(/\s[×÷\−\+\*\/\-]\s$/, " " + sym + " ");
+  } else {
+    calcExpr = "0 " + sym + " ";
   }
   calcUpdateDisplay();
 }
@@ -3863,19 +3971,28 @@ function calcInputOp(op) {
 function calcInputEquals() {
   bzHaptic("medium");
   if (calcExpr === "") return;
-  const num = calcCurrent !== "" ? calcCurrent : "0";
-  const fullExpr = calcExpr + num;
-  const result = calcEvalSafe(fullExpr);
-  calcExpr = fullExpr + " =";
-  calcCurrent = String(result);
+  if (calcCurrent !== "") {
+    const fullExpr = calcExpr + calcCurrent;
+    const result = calcEvalSafe(fullExpr);
+    calcExpr = fullExpr + " =";
+    calcCurrent = String(result);
+  } else {
+    const trimmed = calcExpr.trim().replace(/[×÷\−\+\*\/\-]$/, "").trim();
+    const result = calcEvalSafe(trimmed);
+    calcExpr = trimmed + " =";
+    calcCurrent = String(result);
+  }
   calcJustEvaluated = true;
   calcUpdateDisplay();
 }
 
 function calcGetEvaluatedValue() {
   if (calcExpr && !calcJustEvaluated) {
-    const num = calcCurrent !== "" ? calcCurrent : "0";
-    return calcEvalSafe(calcExpr + num);
+    if (calcCurrent !== "") {
+      return calcEvalSafe(calcExpr + calcCurrent);
+    }
+    const trimmed = calcExpr.trim().replace(/[×÷\−\+\*\/\-]$/, "").trim();
+    return calcEvalSafe(trimmed);
   }
   const val = parseFloat(calcCurrent || "0");
   return isNaN(val) ? 0 : val;
@@ -3889,21 +4006,27 @@ function calcApplyToCart() {
     return;
   }
   const formattedVal = Math.floor(val) === val ? String(val) : String(Math.round(val * 100) / 100);
-  const inp = document.getElementById("cashInp");
+  const activeTab = document.querySelector(".tab.active");
+  const isDebt = activeTab && activeTab.id === "tab-debt";
+  const inpId = isDebt ? "debtInp" : "cashInp";
+  const inp = document.getElementById(inpId) || document.getElementById("cashInp");
   if (inp) {
     const cur = inp.value.trim();
-    if (cur) {
-      inp.value = cur + " " + formattedVal;
-    } else {
+    if (!cur) {
       inp.value = formattedVal;
+    } else if (/^[\d.,\s]+$/.test(cur)) {
+      inp.value = formattedVal;
+    } else {
+      const baseName = cur.replace(/\s+\d[\d\s.,]*$/, "").trim();
+      inp.value = (baseName ? baseName + " " : "") + formattedVal;
     }
     inp.focus();
     const len = inp.value.length;
     try { inp.setSelectionRange(len, len); } catch (e) {}
   }
   closeCalcModal();
-  goTab("main");
-  showToast("🛒 Сумма кассага ўтказилди: " + fmt(val) + " сўм");
+  if (!isDebt) goTab("main");
+  showToast("🛒 Сумма киритилди: " + fmt(val) + " сўм");
 }
 
 function calcCopyResult() {
@@ -3924,6 +4047,8 @@ function calcCopyResult() {
 document.addEventListener("keydown", e => {
   const m = document.getElementById("calcModal");
   if (!m || !m.classList.contains("open")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
   if (e.key >= "0" && e.key <= "9") {
     e.preventDefault();
     calcInputDigit(e.key);
@@ -3937,6 +4062,9 @@ document.addEventListener("keydown", e => {
     e.preventDefault();
     calcInputEquals();
   } else if (e.key === "Backspace") {
+    e.preventDefault();
+    calcInputBackspace();
+  } else if (e.key === "Delete") {
     e.preventDefault();
     calcInputBackspace();
   } else if (e.key === "Escape") {
@@ -4000,6 +4128,17 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(bzAttachPriceHints, 500);
   // Hisobot scheduler
   bzStartReportScheduler();
+
+  // Quick Chips gorizontal scroll (desktop sichqoncha g'ildiragi)
+  const qcScroll = document.getElementById("quickChipsScroll");
+  if (qcScroll) {
+    qcScroll.addEventListener("wheel", e => {
+      if (e.deltaY !== 0 && !e.deltaX) {
+        e.preventDefault();
+        qcScroll.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+  }
 
 });
 

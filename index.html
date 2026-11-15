@@ -263,7 +263,8 @@
       </div>
       <div class="hist-search-box" style="position:relative;margin-bottom:8px">
         <input type="text" id="histSearchInp" class="field" placeholder="🔍 Товар нархини қидириш..."
-               oninput="onHistSearchChange()" style="padding-right:32px;margin-bottom:0"
+               oninput="onHistSearchChange()" onkeydown="if(event.key==='Enter')this.blur()"
+               style="padding-right:32px;margin-bottom:0"
                autocomplete="off" autocorrect="off" spellcheck="false"/>
         <button type="button" id="histSearchClear" onclick="clearHistSearch()"
                 style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:1.1rem;padding:4px;line-height:1">✕</button>
