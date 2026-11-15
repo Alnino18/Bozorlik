@@ -1053,6 +1053,18 @@ function formatItemForInput(it) {
   }
 }
 
+/* ── QUICK CHIPS ── */
+function quickFillChip(productName) {
+  bzHaptic("light");
+  const inp = document.getElementById("cashInp");
+  if (!inp) return;
+  inp.value = productName + " ";
+  inp.focus();
+  const len = inp.value.length;
+  try { inp.setSelectionRange(len, len); } catch (e) {}
+  showToast("✏️ " + productName + " учун нарх ёки миқдорни киритинг");
+}
+
 /* ── CASH (НАҚД ТОВАР) ── */
 function addCash() {
   const inp = document.getElementById("cashInp");
@@ -1664,10 +1676,70 @@ function resendEntryTGByIndex(idx) {
   resendEntryTG(report);
 }
 
+function bzCanonicalName(str) {
+  if (!str) return "";
+  let s = str.toLowerCase();
+  const c2l = {
+    "а":"a", "б":"b", "в":"v", "г":"g", "д":"d", "е":"e", "ё":"yo", "ж":"j",
+    "з":"z", "и":"i", "й":"y", "к":"k", "л":"l", "м":"m", "н":"n", "о":"o",
+    "п":"p", "р":"r", "с":"s", "т":"t", "у":"u", "ф":"f", "х":"x", "ҳ":"h",
+    "ц":"ts", "ч":"ch", "ш":"sh", "щ":"sh", "ъ":"", "ь":"", "э":"e", "ю":"yu",
+    "я":"ya", "ў":"o", "ғ":"g", "қ":"q"
+  };
+  s = s.split("").map(ch => c2l[ch] !== undefined ? c2l[ch] : ch).join("");
+  return s.replace(/['\`ʻʼ]/g, "");
+}
+
+function bzMatchesQuery(targetStr, queryStr) {
+  if (!targetStr || !queryStr) return false;
+  const t = targetStr.toLowerCase();
+  const q = queryStr.toLowerCase();
+  if (t.includes(q)) return true;
+  const cT = bzCanonicalName(t);
+  const cQ = bzCanonicalName(q);
+  return cT.includes(cQ);
+}
+
+function highlightMatch(text, query) {
+  if (!query) return text;
+  const escQ = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escQ})`, "gi");
+  if (regex.test(text)) {
+    return text.replace(regex, '<mark style="background:rgba(255,204,0,0.35);color:inherit;padding:0 3px;border-radius:4px;font-weight:700">$1</mark>');
+  }
+  return text;
+}
+
+function showReceiptForEntry(entry) {
+  if (!entry) return;
+  lastReceiptData = entry;
+  showReceipt();
+}
+
+function onHistSearchChange() {
+  renderHistory();
+}
+
+function clearHistSearch() {
+  const inp = document.getElementById("histSearchInp");
+  if (inp) {
+    inp.value = "";
+    inp.focus();
+  }
+  renderHistory();
+}
+
 function renderHistory() {
   const h   = safeGetJSON("bz_history", []);
-  const mon = document.getElementById("histMonth").value;
+  const monEl = document.getElementById("histMonth");
+  const mon = monEl ? monEl.value : "";
   const selMkt = window._histMktFilter || "";
+  const searchInp = document.getElementById("histSearchInp");
+  const searchQ = (searchInp?.value || "").trim();
+
+  // Clear button toggle
+  const clearBtn = document.getElementById("histSearchClear");
+  if (clearBtn) clearBtn.style.display = searchQ ? "block" : "none";
 
   // Точка фильтр тугмалари
   const allMkts = [...new Set(h.map(e=>e.market).filter(Boolean))];
@@ -1676,14 +1748,99 @@ function renderHistory() {
     mf.innerHTML = allMkts.map(m=>`<button onclick="window._histMktFilter='${m}'===window._histMktFilter?'':'${m}';renderHistory()" style="padding:5px 12px;border-radius:99px;border:none;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;background:${selMkt===m?'var(--blue)':'var(--bg)'};color:${selMkt===m?'#fff':'var(--text2)'}">${m}</button>`).join("");
   }
 
-  let filt = mon ? h.filter(e=>e.date&&e.date.startsWith(mon)) : h;
-  if (selMkt) filt = filt.filter(e=>e.market===selMkt);
-
   const cont = document.getElementById("histList");
-
-  // Статистика
   const statsCard = document.getElementById("histStatsCard");
   const statsRow  = document.getElementById("histStatsRow");
+
+  // ТОВАР ҚИДИРИШ НАТИЖАСИ
+  if (searchQ) {
+    if (statsCard) statsCard.style.display = "none";
+    const matches = [];
+    h.forEach((entry, eIdx) => {
+      if (selMkt && entry.market !== selMkt) return;
+      const checkItem = (it, type) => {
+        if (!it || !it.name) return;
+        if (bzMatchesQuery(it.name, searchQ)) {
+          matches.push({
+            entry,
+            eIdx,
+            date: entry.date,
+            time: entry.time,
+            market: it.market || entry.market || "—",
+            name: it.name,
+            kg: it.kg,
+            unitPrice: it.unitPrice,
+            totalPrice: it.totalPrice,
+            type: type
+          });
+        }
+      };
+      (entry.cashItems || []).forEach(it => checkItem(it, "cash"));
+      (entry.cardItems || []).forEach(it => checkItem(it, "card"));
+    });
+
+    if (!matches.length) {
+      cont.innerHTML = `<div class="empty-state"><span class="empty-icon">🔍</span>«${esc(searchQ)}» бўйича тарихда харид топилмади</div>`;
+      return;
+    }
+
+    const totalSpent = matches.reduce((s, m) => s + (m.totalPrice || 0), 0);
+    const unitPrices = matches.map(m => m.unitPrice).filter(p => p > 0);
+    const minPrice = unitPrices.length ? Math.min(...unitPrices) : null;
+    const maxPrice = unitPrices.length ? Math.max(...unitPrices) : null;
+    const latestPrice = matches[0].unitPrice || matches[0].totalPrice;
+
+    let statsBanner = `
+      <div style="background:var(--card);border:1.5px solid var(--blue);border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,122,255,0.08)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:700;color:var(--blue);font-size:.92rem">🔍 «${esc(searchQ)}» бўйича харидлар</span>
+          <span style="font-size:.78rem;background:var(--blue-bg);color:var(--blue);padding:3px 9px;border-radius:99px;font-weight:700">${matches.length} та топилди</span>
+        </div>
+        <div style="font-size:.8rem;color:var(--text2);display:flex;flex-wrap:wrap;gap:12px;margin-top:6px">
+          <span>💰 Жами сумма: <b style="color:var(--text)">${fmt(totalSpent)} сўм</b></span>
+          ${latestPrice ? `<span>🕐 Охирги нарх: <b style="color:var(--orange)">${fmt(latestPrice)} сўм</b></span>` : ""}
+          ${minPrice && maxPrice ? `<span>📊 Нарх оралиғи: <b style="color:var(--green)">${fmt(minPrice)}</b> - <b style="color:var(--red)">${fmt(maxPrice)} сўм</b></span>` : ""}
+        </div>
+      </div>`;
+
+    const itemsHtml = matches.map((m) => {
+      const isCard = m.type === "card";
+      return `
+        <div class="hist-entry" style="padding:12px 14px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div>
+              <div style="font-weight:700;font-size:.95rem;color:var(--text)">
+                ${isCard ? '💳' : '💰'} ${highlightMatch(esc(m.name), searchQ)}${m.kg ? ` <span style="font-weight:500;color:var(--text2);font-size:.82rem">${m.kg}кг</span>` : ''}
+              </div>
+              ${m.unitPrice ? `<div style="font-size:.78rem;color:var(--text2);margin-top:2px">1кг/дона = <b style="color:var(--blue)">${fmt(m.unitPrice)} сўм</b></div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-weight:700;font-size:1.02rem;color:${isCard ? 'var(--purple)' : 'var(--orange)'}">
+                ${fmt(m.totalPrice)} сўм
+              </div>
+              <span style="font-size:.68rem;padding:2px 7px;border-radius:6px;background:${isCard ? 'var(--purple-bg)' : 'var(--orange-bg)'};color:${isCard ? 'var(--purple)' : 'var(--orange)'};font-weight:700">
+                ${isCard ? 'Карта' : 'Нақд'}
+              </span>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:.76rem;color:var(--text2)">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>📍 <b>${esc(m.market)}</b></span>
+              <span>📅 ${fmtD(m.date)}${m.time ? ' ' + m.time : ''}</span>
+            </div>
+            <button onclick="showReceiptForEntry(safeGetJSON('bz_history', [])[${m.eIdx}])" style="padding:4px 10px;border-radius:8px;border:none;background:var(--blue-bg);color:var(--blue);font-weight:600;font-size:.75rem;cursor:pointer;font-family:inherit">
+              🧾 Чек
+            </button>
+          </div>
+        </div>`;
+    }).join("");
+
+    cont.innerHTML = statsBanner + itemsHtml;
+    return;
+  }
+
+  let filt = mon ? h.filter(e=>e.date&&e.date.startsWith(mon)) : h;
+  if (selMkt) filt = filt.filter(e=>e.market===selMkt);
   if (filt.length && mon && statsCard && statsRow) {
     const total   = filt.reduce((s,e)=>s+(e.spent||e.cashTotal||0)+(e.cardTotal||0),0);
     const avg     = Math.round(total / filt.length);
@@ -3553,6 +3710,246 @@ async function sendTGText(text) {
   }
 }
 
+
+/* ══════════════════════════════════════════
+   🧮 ИХЧАМ КАЛЬКУЛЯТОР
+══════════════════════════════════════════ */
+let calcExpr = "";
+let calcCurrent = "0";
+let calcJustEvaluated = false;
+
+function openCalcModal() {
+  bzHaptic("light");
+  const m = document.getElementById("calcModal");
+  if (m) {
+    m.classList.add("open");
+    calcUpdateDisplay();
+  }
+}
+
+function closeCalcModal(e) {
+  if (!e || e.target === document.getElementById("calcModal")) {
+    const m = document.getElementById("calcModal");
+    if (m) m.classList.remove("open");
+  }
+}
+
+function calcUpdateDisplay() {
+  const exprEl = document.getElementById("calcExprView");
+  const resEl = document.getElementById("calcResultView");
+  if (exprEl) exprEl.innerHTML = calcExpr || "&nbsp;";
+  if (resEl) {
+    if (calcCurrent === "" || calcCurrent === "0") {
+      resEl.textContent = "0";
+    } else if (calcCurrent.endsWith(".")) {
+      const whole = calcCurrent.slice(0, -1);
+      resEl.textContent = (isNaN(+whole) ? whole : fmt(+whole)) + ".";
+    } else if (calcCurrent.includes(".")) {
+      const [whole, dec] = calcCurrent.split(".");
+      resEl.textContent = (isNaN(+whole) ? whole : fmt(+whole)) + "." + dec;
+    } else {
+      resEl.textContent = isNaN(+calcCurrent) ? calcCurrent : fmt(+calcCurrent);
+    }
+  }
+}
+
+function calcInputDigit(digit) {
+  bzHaptic("light");
+  if (calcJustEvaluated) {
+    calcExpr = "";
+    calcCurrent = digit === "00" ? "0" : digit;
+    calcJustEvaluated = false;
+  } else {
+    if (calcCurrent.length >= 14) return;
+    if (calcCurrent === "0") {
+      calcCurrent = digit === "00" ? "0" : digit;
+    } else {
+      calcCurrent += digit;
+    }
+  }
+  calcUpdateDisplay();
+}
+
+function calcInputDot() {
+  bzHaptic("light");
+  if (calcJustEvaluated) {
+    calcExpr = "";
+    calcCurrent = "0.";
+    calcJustEvaluated = false;
+  } else {
+    if (!calcCurrent) calcCurrent = "0.";
+    else if (!calcCurrent.includes(".")) calcCurrent += ".";
+  }
+  calcUpdateDisplay();
+}
+
+function calcInputBackspace() {
+  bzHaptic("light");
+  if (calcJustEvaluated) {
+    calcExpr = "";
+    calcCurrent = "0";
+    calcJustEvaluated = false;
+  } else if (calcCurrent.length > 1) {
+    calcCurrent = calcCurrent.slice(0, -1);
+  } else {
+    calcCurrent = "0";
+  }
+  calcUpdateDisplay();
+}
+
+function calcInputClear() {
+  bzHaptic("medium");
+  calcExpr = "";
+  calcCurrent = "0";
+  calcJustEvaluated = false;
+  calcUpdateDisplay();
+}
+
+function calcInputPercent() {
+  bzHaptic("light");
+  const val = parseFloat(calcCurrent || "0");
+  if (!isNaN(val)) {
+    const res = Math.round((val / 100) * 10000) / 10000;
+    calcCurrent = String(res);
+    calcUpdateDisplay();
+  }
+}
+
+function calcOpSymbol(op) {
+  if (op === "*" || op === "×") return "×";
+  if (op === "/" || op === "÷") return "÷";
+  if (op === "-" || op === "−") return "−";
+  return "+";
+}
+
+function calcEvalSafe(exprStr) {
+  const sanitized = exprStr
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/−/g, "-")
+    .replace(/,/g, ".");
+  if (!/^[0-9\.\s\+\-\*\/]+$/.test(sanitized)) return 0;
+  try {
+    const res = Function("return (" + sanitized + ")")();
+    if (!isFinite(res) || isNaN(res)) return 0;
+    return Math.round(res * 10000) / 10000;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function calcInputOp(op) {
+  bzHaptic("light");
+  const sym = calcOpSymbol(op);
+  if (calcJustEvaluated) {
+    calcExpr = (calcCurrent || "0") + " " + sym + " ";
+    calcCurrent = "";
+    calcJustEvaluated = false;
+  } else if (calcCurrent !== "") {
+    if (calcExpr !== "") {
+      const intermediate = calcEvalSafe(calcExpr + calcCurrent);
+      calcExpr = intermediate + " " + sym + " ";
+      calcCurrent = "";
+    } else {
+      calcExpr = calcCurrent + " " + sym + " ";
+      calcCurrent = "";
+    }
+  } else if (calcExpr !== "") {
+    calcExpr = calcExpr.replace(/\s[×÷\−\+\*\/\-]\s$/, " " + sym + " ");
+  }
+  calcUpdateDisplay();
+}
+
+function calcInputEquals() {
+  bzHaptic("medium");
+  if (calcExpr === "") return;
+  const num = calcCurrent !== "" ? calcCurrent : "0";
+  const fullExpr = calcExpr + num;
+  const result = calcEvalSafe(fullExpr);
+  calcExpr = fullExpr + " =";
+  calcCurrent = String(result);
+  calcJustEvaluated = true;
+  calcUpdateDisplay();
+}
+
+function calcGetEvaluatedValue() {
+  if (calcExpr && !calcJustEvaluated) {
+    const num = calcCurrent !== "" ? calcCurrent : "0";
+    return calcEvalSafe(calcExpr + num);
+  }
+  const val = parseFloat(calcCurrent || "0");
+  return isNaN(val) ? 0 : val;
+}
+
+function calcApplyToCart() {
+  bzHaptic("success");
+  const val = calcGetEvaluatedValue();
+  if (val <= 0) {
+    showToast("⚠️ Сумма 0 дан катта бўлиши керак");
+    return;
+  }
+  const formattedVal = Math.floor(val) === val ? String(val) : String(Math.round(val * 100) / 100);
+  const inp = document.getElementById("cashInp");
+  if (inp) {
+    const cur = inp.value.trim();
+    if (cur) {
+      inp.value = cur + " " + formattedVal;
+    } else {
+      inp.value = formattedVal;
+    }
+    inp.focus();
+    const len = inp.value.length;
+    try { inp.setSelectionRange(len, len); } catch (e) {}
+  }
+  closeCalcModal();
+  goTab("main");
+  showToast("🛒 Сумма кассага ўтказилди: " + fmt(val) + " сўм");
+}
+
+function calcCopyResult() {
+  bzHaptic("light");
+  const val = calcGetEvaluatedValue();
+  const formattedVal = Math.floor(val) === val ? String(val) : String(Math.round(val * 100) / 100);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(formattedVal).then(() => {
+      showToast("📋 Нусха олинди: " + fmt(val) + " сўм");
+    }).catch(() => {
+      bzCopyFallback(formattedVal);
+    });
+  } else {
+    bzCopyFallback(formattedVal);
+  }
+}
+
+document.addEventListener("keydown", e => {
+  const m = document.getElementById("calcModal");
+  if (!m || !m.classList.contains("open")) return;
+  if (e.key >= "0" && e.key <= "9") {
+    e.preventDefault();
+    calcInputDigit(e.key);
+  } else if (e.key === "." || e.key === ",") {
+    e.preventDefault();
+    calcInputDot();
+  } else if (e.key === "+" || e.key === "-" || e.key === "*" || e.key === "/") {
+    e.preventDefault();
+    calcInputOp(e.key);
+  } else if (e.key === "Enter" || e.key === "=") {
+    e.preventDefault();
+    calcInputEquals();
+  } else if (e.key === "Backspace") {
+    e.preventDefault();
+    calcInputBackspace();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeCalcModal();
+  } else if (e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    calcInputClear();
+  } else if (e.key === "%") {
+    e.preventDefault();
+    calcInputPercent();
+  }
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   initDark();

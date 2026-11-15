@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>BOZORLIK</title>
-  <link rel="stylesheet" href="style.css?v=5"/>
+  <link rel="stylesheet" href="style.css?v=6"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="apple-touch-startup-image" href="splash.png"/>
@@ -25,6 +25,7 @@
   </div>
   <div class="h-actions">
     <button class="h-btn ai-pill" onclick="openAiAgentModal()" id="ai-btn" title="Bozorlik AI Agenti">🤖 AI</button>
+    <button class="h-btn" onclick="openCalcModal()" id="calc-btn" title="Калькулятор">🧮</button>
     <button class="h-btn" onclick="toggleDark()" id="dark-btn">🌙</button>
     <button class="h-btn tg-status" id="tg-pill" onclick="openTgModal()">✈️ TG</button>
   </div>
@@ -149,6 +150,22 @@
     </div>
     <div id="voiceStatus" style="display:none;font-size:.78rem;color:var(--blue);text-align:center;padding:4px 16px;animation:pulse 1s infinite">🎤 Гапиряпсиз...</div>
 
+    <!-- ТЕЗКОР ТУГМАЛАР (QUICK CHIPS) -->
+    <div class="quick-chips-wrapper">
+      <div class="quick-chips-scroll" id="quickChipsScroll">
+        <button type="button" class="quick-chip calc-chip" onclick="openCalcModal()" title="Калькулятор">🧮 Калькулятор</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Гўшт')">🥩 Гўшт</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Пиёз')">🧅 Пиёз</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Картошка')">🥔 Картошка</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Ёғ')">🛢️ Ёғ</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Сабзи')">🥕 Сабзи</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Помидор')">🍅 Помидор</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Нон')">🍞 Нон</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Сут')">🥛 Сут</button>
+        <button type="button" class="quick-chip" onclick="quickFillChip('Гуруч')">🍚 Гуруч</button>
+      </div>
+    </div>
+
     <!-- нақд товар -->
     <div class="card">
       <div class="section-head">
@@ -243,6 +260,13 @@
       <div class="filter-row" style="margin-bottom:8px">
         <input type="month" id="histMonth" class="field" onchange="renderHistory()" style="margin-bottom:0"/>
         <button class="sm-danger-btn" onclick="clearHistory()">🗑</button>
+      </div>
+      <div class="hist-search-box" style="position:relative;margin-bottom:8px">
+        <input type="text" id="histSearchInp" class="field" placeholder="🔍 Товар нархини қидириш..."
+               oninput="onHistSearchChange()" style="padding-right:32px;margin-bottom:0"
+               autocomplete="off" autocorrect="off" spellcheck="false"/>
+        <button type="button" id="histSearchClear" onclick="clearHistSearch()"
+                style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:1.1rem;padding:4px;line-height:1">✕</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button onclick="openReportModal('month')" style="flex:1;padding:8px 10px;background:var(--blue-bg);color:var(--blue);border:none;border-radius:8px;font-weight:600;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit">
@@ -472,6 +496,63 @@
   </div>
 </div>
 
+<!-- CALCULATOR MODAL -->
+<div class="modal-bg" id="calcModal" onclick="closeCalcModal(event)">
+  <div class="modal-box calc-modal-box">
+    <div class="calc-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.3rem">🧮</span>
+        <h3 style="margin:0;font-size:1.05rem;font-weight:700">Калькулятор</h3>
+      </div>
+      <button type="button" onclick="closeCalcModal()" class="calc-close-btn" aria-label="Ёпиш">✕</button>
+    </div>
+
+    <!-- Screen Display -->
+    <div class="calc-screen">
+      <div class="calc-expr" id="calcExprView">&nbsp;</div>
+      <div class="calc-result" id="calcResultView">0</div>
+    </div>
+
+    <!-- Keypad -->
+    <div class="calc-grid">
+      <button type="button" class="calc-btn op-clear" onclick="calcInputClear()">C</button>
+      <button type="button" class="calc-btn op-func" onclick="calcInputBackspace()">⌫</button>
+      <button type="button" class="calc-btn op-func" onclick="calcInputPercent()">%</button>
+      <button type="button" class="calc-btn op-math" onclick="calcInputOp('÷')">÷</button>
+
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('7')">7</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('8')">8</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('9')">9</button>
+      <button type="button" class="calc-btn op-math" onclick="calcInputOp('×')">×</button>
+
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('4')">4</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('5')">5</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('6')">6</button>
+      <button type="button" class="calc-btn op-math" onclick="calcInputOp('−')">−</button>
+
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('1')">1</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('2')">2</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('3')">3</button>
+      <button type="button" class="calc-btn op-math" onclick="calcInputOp('+')">+</button>
+
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('0')">0</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDigit('00')">00</button>
+      <button type="button" class="calc-btn num-btn" onclick="calcInputDot()">.</button>
+      <button type="button" class="calc-btn op-eq" onclick="calcInputEquals()">=</button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="calc-actions">
+      <button type="button" class="calc-act-btn to-cart" onclick="calcApplyToCart()">
+        <span>🛒</span> Саватга ўтказиш
+      </button>
+      <button type="button" class="calc-act-btn copy-btn" onclick="calcCopyResult()">
+        <span>📋</span> Нусха олиш
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFETTI -->
 <canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none"></canvas>
 
@@ -479,6 +560,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="firebase.js?v=3"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
