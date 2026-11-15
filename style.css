@@ -495,7 +495,7 @@ body.dark .period-row { background: #2c2c2e; }
 .modal-box {
   background: var(--surface);
   border-radius: var(--radius) var(--radius) 0 0;
-  padding: 20px 18px 34px;
+  padding: 20px 18px max(28px, calc(18px + env(safe-area-inset-bottom, 0px)));
   width: 100%; max-width: 500px;
   animation: sheetUp .3s cubic-bezier(.32,1,.23,1);
 }
@@ -850,6 +850,48 @@ body.dark .h-btn.ai-pill {
   overflow-y: auto;
   flex: 1;
 }
+.report-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: .82rem;
+}
+.report-content th, .report-content td {
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.report-content th {
+  font-weight: 700;
+  color: var(--text2);
+  background: var(--bg);
+}
+
+/* ── HISTORY SEARCH BOX ── */
+.hist-search-box {
+  position: relative;
+  margin-bottom: 8px;
+}
+#histSearchInp {
+  padding-right: 34px !important;
+  margin-bottom: 0 !important;
+}
+#histSearchClear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px;
+  line-height: 1;
+}
+#histSearchClear:hover {
+  color: var(--text);
+}
 
 /* ── QUICK CHIPS ── */
 .quick-chips-wrapper {
@@ -1067,15 +1109,41 @@ body.dark .calc-act-btn.copy-btn {
   body {
     background: #fff !important;
     color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-  header, .bottom-nav, #splash, .h-actions, .filter-row, .modal-btns, .ai-pill, #toast, #aiAgentModal, #tgModal, #quickModal, #editModal, #receiptModal, #cameraAiModal, #calcModal {
+  header, .bottom-nav, #splash, .h-actions, .filter-row, .modal-btns, .ai-pill, #toast, #aiAgentModal, #tgModal, #quickModal, #editModal, #receiptModal, #cameraAiModal, #calcModal, main, .quick-chips-wrapper, .dashboard-widget {
     display: none !important;
+  }
+  .modal-bg#reportModal {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
   .report-modal-box {
     max-width: 100% !important;
+    max-height: none !important;
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    border-radius: 0 !important;
+  }
+  .report-content {
+    overflow: visible !important;
+    max-height: none !important;
+    color: #000 !important;
+  }
+  .report-content table, .report-content th, .report-content td {
+    color: #000 !important;
+    border-color: #ddd !important;
   }
 }
 

@@ -61,6 +61,7 @@ function setCardBalance(amount) {
 
 function addToCardBalance() {
   const inp = document.getElementById("addCardBalance");
+  if (!inp) return;
   const val = +inp.value;
   if (!val || val <= 0) { 
     showToast("⚠️ Миқдорни киритинг"); 
@@ -119,6 +120,9 @@ window.today = today;
 window.toLocalDateStr = toLocalDateStr;
 const fmtD   = s => { if (!s) return "—"; const [y,m,d]=s.split("-"); return `${d}.${m}.${y}`; };
 const esc    = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+window.fmt = fmt;
+window.fmtD = fmtD;
+window.esc = esc;
 
 /* ── MARKET SELECT ── */
 function selectMarket(btn, name) {
@@ -1055,8 +1059,12 @@ function formatItemForInput(it) {
 
 /* ── QUICK CHIPS ── */
 function quickFillChip(productName) {
+  if (!productName) return;
   bzHaptic("light");
-  const inp = document.getElementById("cashInp");
+  const activeTab = document.querySelector(".tab.active");
+  const isDebt = activeTab && activeTab.id === "tab-debt";
+  const targetId = isDebt ? "debtInp" : "cashInp";
+  const inp = document.getElementById(targetId) || document.getElementById("cashInp");
   if (!inp) return;
   const cur = inp.value.trim();
   if (!cur) {
@@ -1133,6 +1141,7 @@ function renderCash() {
 /* ── CARD ITEMS (КАРТА ТОВАР) ── */
 function addCard() {
   const inp = document.getElementById("cardInp");
+  if (!inp) return;
   const t = inp.value.trim(); if (!t) return;
   const p = parse(t);
   if (!p) { showToast("⚠️ Формат: Гўшт 200000 ёки Гўшт 5кг (40000) 200000"); return; }
@@ -1153,9 +1162,12 @@ function delCard(i) {
 function editCard(i) {
   const it = cardItems[i];
   if (!it) return;
-  document.getElementById("cardInp").value = formatItemForInput(it);
-  delCard(i);
-  document.getElementById("cardInp").focus();
+  const inp = document.getElementById("cardInp");
+  if (inp) {
+    inp.value = formatItemForInput(it);
+    delCard(i);
+    inp.focus();
+  }
 }
 function renderCard() {
   const list = document.getElementById("cardList");
@@ -1403,7 +1415,7 @@ function buildDebtSummaryReport() {
   const spendToday = hist.filter(e => e.date === t)
     .reduce((s,e) => s + (e.cashTotal ?? e.spent ?? 0) + (e.cardTotal || 0), 0);
 
-  const remain = getCashBalance() + getCardBalance();
+  const remain = getCashBalance();
 
   const debts = safeGetJSON("bz_debts", []);
   const debtToday = debts.filter(d => d.date === t).reduce((s,d) => s + (d.totalPrice||0), 0);
@@ -3418,8 +3430,8 @@ async function bzProcessAiAgent(query) {
   const t = today();
 
   // 1. BUYRUQ: Tovar qo'shish (barcha xaridlar kassa/savatchaga qo'shiladi)
-  if (!/qarz|қарз/i.test(q) && /qo'?sh|yoz|olindi|плюс|\+/i.test(q)) {
-    const clean = q.replace(/naqdga|нақдга|kartaga|картага|naqd|нақд|karta|карта|qo'?sh|yoz|qil/gi, "").trim();
+  if (!/qarz|қарз/i.test(q) && /qo'?sh|қўш|yoz|ёз|olindi|олинди|oldi|олди|плюс|\+/i.test(q)) {
+    const clean = q.replace(/naqdga|нақдга|kartaga|картага|naqd|нақд|karta|карта|qo'?shildi|қўшилди|qo'?sh|қўш|yozildi|ёзилди|yozib\s*qo'?y|ёзиб\s*қўй|yoz|ёз|ёзинг|olindi|олинди|олдин|oldi|олди|плюс|\+|qil/gi, "").trim();
     const p = parse(clean);
     if (p) {
       p.seq = itemSeq++;
@@ -3433,8 +3445,8 @@ async function bzProcessAiAgent(query) {
   }
 
   // 2. BUYRUQ: Qarz qo'shish
-  if (/qarz|қарз/i.test(q) && /qo'?sh|yoz|бердим|олди/i.test(q)) {
-    const clean = q.replace(/qarzga|қарзга|qarz|қарз|qo'?sh|yoz/gi, "").trim();
+  if (/qarz|қарз/i.test(q) && /qo'?sh|қўш|yoz|ёз|berdim|бердим|berildi|берилди|oldi|олди/i.test(q)) {
+    const clean = q.replace(/qarzga|қарзга|qarz|қарз|qo'?shildi|қўшилди|qo'?sh|қўш|yozildi|ёзилди|yozib\s*qo'?y|ёзиб\s*қўй|yoz|ёз|ёзинг|berildi|берилди|berdim|бердим|oldi|олди/gi, "").trim();
     const p = parse(clean);
     if (p) {
       loadAllDebts();
@@ -3642,6 +3654,11 @@ function launchConfetti() {
 ══════════════════════════════════════════ */
 function animateItemAdd(itemEl) {
   if (!itemEl) return;
+  if (typeof requestAnimationFrame === "undefined") {
+    itemEl.style.opacity = "1";
+    itemEl.style.transform = "translateY(0) scale(1)";
+    return;
+  }
   itemEl.style.opacity = "0";
   itemEl.style.transform = "translateY(-12px) scale(0.95)";
   itemEl.style.transition = "all 0.3s cubic-bezier(.34,1.56,.64,1)";
@@ -3914,6 +3931,10 @@ function calcInputPercent() {
   if (!isNaN(val)) {
     const res = Math.round((val / 100) * 10000) / 10000;
     calcCurrent = String(res);
+    if (calcJustEvaluated) {
+      calcExpr = "";
+      calcJustEvaluated = false;
+    }
     calcUpdateDisplay();
   }
 }
@@ -3970,7 +3991,7 @@ function calcInputOp(op) {
 
 function calcInputEquals() {
   bzHaptic("medium");
-  if (calcExpr === "") return;
+  if (calcJustEvaluated || calcExpr === "") return;
   if (calcCurrent !== "") {
     const fullExpr = calcExpr + calcCurrent;
     const result = calcEvalSafe(fullExpr);
@@ -4092,8 +4113,8 @@ document.addEventListener("DOMContentLoaded", () => {
   renderAllDebts();
 
   const cashBalance = getCashBalance();
-  document.getElementById("income").value = fmt(cashBalance) + " сўм";
-  document.getElementById("income").readOnly = true;
+  const incEl = document.getElementById("income");
+  if (incEl) { incEl.value = fmt(cashBalance) + " сўм"; incEl.readOnly = true; }
 
   const cardBalance = getCardBalance();
   const cardIncEl = document.getElementById("cardIncome");
